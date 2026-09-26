@@ -42,6 +42,8 @@ interface Job {
   outputs: Array<{ label: string; blob: Blob; name: string; primary?: boolean }>
   notes: string[]
   pdf?: PdfResult
+  /** Regions found by OCR on scanned pages (not part of the text mapping). */
+  ocrFound?: number
   sourceText?: string
 }
 
@@ -106,13 +108,21 @@ export function FileView({ openInText }: { openInText: (text: string) => void })
           const res = await processPdf(await job.file.arrayBuffer(), settings.detect, maskOpts, prior, (p) => patch(job.id, { progress: p * 0.3 }))
           runningMapping.current.push(...res.masked.mapping)
           const notes: string[] = []
-          if (res.emptyPages) notes.push(`${res.emptyPages}쪽은 글자 정보가 없는 스캔 이미지예요. 해당 쪽은 ‘이미지’ 탭에서 OCR로 가려 주세요`)
-          const pdfBlob = await redactPdf(res, new Set(), settings.imageStyle === 'white' ? 'white' : 'black', (p) => patch(job.id, { progress: 0.3 + p * 0.7 }))
+          const red = await redactPdf(
+            res,
+            new Set(),
+            settings.imageStyle === 'white' ? 'white' : 'black',
+            (p) => patch(job.id, { progress: 0.3 + p * 0.7 }),
+            res.emptyPages ? { detect: settings.detect } : undefined,
+          )
+          const pdfBlob = red.blob
+          if (red.ocrPages) notes.push(`스캔된 ${red.ocrPages}쪽은 글자 인식(OCR)으로 ${red.ocrFound}곳을 찾아 가렸어요. 스캔 품질에 따라 놓칠 수 있으니 꼭 확인해 주세요`)
           notes.push('가린 PDF는 페이지를 이미지로 바꿔 만들어서, 가린 글자를 복사·복원할 수 없어요')
           patch(job.id, {
             status: 'done',
             masked: res.masked,
             pdf: res,
+            ocrFound: red.ocrFound,
             sourceText: res.text,
             notes,
             outputs: [
@@ -288,7 +298,7 @@ export function FileView({ openInText }: { openInText: (text: string) => void })
 
       <div className="jobs">
         {jobs.map((job) => {
-          const total = job.masked ? Object.values(job.masked.counts).reduce((a, b) => a + (b ?? 0), 0) : 0
+          const total = (job.masked ? Object.values(job.masked.counts).reduce((a, b) => a + (b ?? 0), 0) : 0) + (job.ocrFound ?? 0)
           const isOpen = expanded === job.id
           return (
             <Card key={job.id} className={`job job-${job.status}`}>

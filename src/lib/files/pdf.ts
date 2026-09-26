@@ -142,7 +142,11 @@ export async function redactPdf(
   disabledIds: ReadonlySet<string>,
   style: BoxStyle,
   onProgress?: (p: number) => void,
-): Promise<Blob> {
+  /** When given, pages without a text layer (scans) are OCR'd and redacted too. */
+  ocr?: { detect: DetectOptions; onScan?: (page: number, found: number) => void },
+): Promise<{ blob: Blob; ocrPages: number; ocrFound: number }> {
+  let ocrPages = 0
+  let ocrFound = 0
   const active = result.entities.filter((e) => !disabledIds.has(e.id))
   const images: Array<{ jpeg: Uint8Array; w: number; h: number; pw: number; ph: number }> = []
   const scale = 2
@@ -159,6 +163,15 @@ export async function redactPdf(
     await page.render({ canvas, canvasContext: ctx, viewport: vp }).promise
     ctx.fillStyle = style === 'black' ? '#000' : '#fff'
     const pt = result.pages[i]
+    if (ocr && !pt.text.trim()) {
+      const { detectInImage } = await import('../ocr')
+      const { detections } = await detectInImage(canvas, ocr.detect)
+      ctx.fillStyle = style === 'black' ? '#000' : '#fff'
+      for (const d of detections) ctx.fillRect(d.box.x, d.box.y, d.box.w, d.box.h)
+      ocrPages++
+      ocrFound += detections.length
+      ocr.onScan?.(i + 1, detections.length)
+    }
     for (const e of active) {
       for (const it of pt.items) {
         if (it.end <= e.start || it.start >= e.end || it.end === it.start) continue
@@ -180,7 +193,7 @@ export async function redactPdf(
     canvas.width = canvas.height = 0
     onProgress?.((i + 1) / result.pageCount)
   }
-  return buildImagePdf(images)
+  return { blob: buildImagePdf(images), ocrPages, ocrFound }
 }
 
 /** Minimal PDF writer: one full-page JPEG per page. */

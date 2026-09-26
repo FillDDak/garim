@@ -92,7 +92,7 @@ export function GuideView({ go }: { go: (route: string) => void }) {
             { icon: <ScanSearch size={20} />, t: '한국형 개인정보 17종', d: '주민·외국인등록번호(체크섬 검증), 휴대폰·유선전화, 계좌·카드(Luhn 검증), 사업자·법인번호, 여권·운전면허, 차량번호, 도로명 주소, 이름까지.' },
             { icon: <KeyRound size={20} />, t: '개발자 비밀값', d: 'OpenAI·Anthropic·AWS·GitHub·Slack·Stripe 키, JWT, DB 접속 비밀번호, password= 값, Bearer 토큰을 로그에서 찾아 가려요.' },
             { icon: <Undo2 size={20} />, t: '되돌릴 수 있는 가림', d: '같은 값은 항상 같은 표시로. AI가 표기를 조금 바꿔도 복원하고, 복원 키는 이 기기에만 저장돼요.' },
-            { icon: <FileLock2 size={20} />, t: '서식 그대로 문서 가림', d: 'Word·Excel·PowerPoint·한글(HWPX)은 서식을 유지한 채 글자만 바꾸고, 작성자 정보와 미리보기 이미지도 지워요. PDF는 복원 불가능한 이미지 PDF로.' },
+            { icon: <FileLock2 size={20} />, t: '서식 그대로 문서 가림', d: 'Word·Excel·PowerPoint·한글(HWPX)은 서식을 유지한 채 글자만 바꾸고, 작성자 정보와 미리보기 이미지도 지워요. PDF는 복원 불가능한 이미지 PDF로, 스캔본도 OCR로 가려요.' },
             { icon: <ImageOff size={20} />, t: '캡처 이미지 OCR 가림', d: '카톡 캡처·주문내역·신분증 사진에서 글자를 인식해 자동으로 박스를 씌워요. QR 코드와 사진 위치정보(EXIF)도 처리.' },
             { icon: <WifiOff size={20} />, t: '완전 오프라인', d: '서버가 없습니다. 앱으로 설치하면 비행기 모드에서도 동작하고, 보안 정책으로 외부 전송 자체가 차단돼요.' },
           ].map((f) => (
