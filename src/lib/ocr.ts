@@ -1,8 +1,8 @@
 import type { Worker } from 'tesseract.js'
 import { detect } from '../core/engine'
 import type { DetectOptions, Entity, EntityType } from '../core/types'
+import { assetUrl } from './assetUrl'
 
-const BASE = import.meta.env.BASE_URL
 
 export interface OcrProgress {
   status: string
@@ -28,11 +28,10 @@ export function getOcrWorker(onProgress?: (p: OcrProgress) => void): Promise<Wor
   if (!workerPromise) {
     workerPromise = (async () => {
       const { createWorker } = await import('tesseract.js')
-      const abs = (p: string) => new URL(`${BASE}${p}`, window.location.href).href
       const worker = await createWorker(['kor', 'eng'], 1, {
-        workerPath: abs('ocr/worker.min.js'),
-        corePath: abs('ocr/core'),
-        langPath: abs('ocr/lang'),
+        workerPath: assetUrl('ocr/worker.min.js'),
+        corePath: assetUrl('ocr/core'),
+        langPath: assetUrl('ocr/lang'),
         gzip: true,
         cacheMethod: 'write',
         logger: (m: { status: string; progress: number }) => progressListener?.({ status: STATUS_KO[m.status] ?? m.status, progress: m.progress }),

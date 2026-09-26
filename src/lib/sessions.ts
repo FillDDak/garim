@@ -38,7 +38,8 @@ export function newSession(): Session {
 
 export function pruneSessions(sessions: Session[], retention: Retention, now = Date.now()): Session[] {
   const ttl = RETENTION_MS[retention]
-  if (!Number.isFinite(ttl)) return sessions
+  // 'tab' sessions live in sessionStorage and disappear with the tab – never prune them by age
+  if (!Number.isFinite(ttl) || retention === 'tab') return sessions
   return sessions.filter((s) => now - s.updatedAt < ttl)
 }
 

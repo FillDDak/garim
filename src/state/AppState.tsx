@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { defaultDetectOptions } from '../core/engine'
 import { mergeMapping } from '../core/mask'
 import type { DetectOptions, EntityType, MappingEntry, MaskOptions } from '../core/types'
-import { clearAll, load, save } from '../lib/storage'
+import { clearAll, load, remove, save } from '../lib/storage'
 import { newSession, pruneSessions, sessionTitle, type Retention, type Session } from '../lib/sessions'
 
 export type Theme = 'system' | 'light' | 'dark'
@@ -77,7 +77,7 @@ function writeSessions(sessions: Session[], retention: Retention) {
     } catch {
       /* ignore */
     }
-    save('sessions', [])
+    remove('sessions')
     return
   }
   save('sessions', sessions)

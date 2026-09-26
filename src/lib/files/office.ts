@@ -174,9 +174,14 @@ export async function processOffice(
   }
 
   // authors of comments / tracked changes, and personal data hidden in hyperlinks
-  const linkPrior = [...prior, ...masked.mapping]
+  // extra values found outside the body text (links, numeric cells) join the same mapping
+  const extraPrior = () => [...prior, ...masked.mapping]
+  const addMapping = (entries: MappingEntry[]) => {
+    for (const e of entries) if (!masked.mapping.some((m) => m.key === e.key && m.mode === e.mode)) masked.mapping.push(e)
+  }
   let authors = false
   let links = false
+  let numericCells = 0
   for (const path of paths) {
     if (!/\.(xml|rels)$/.test(path)) continue
     const file = zip.file(path)
@@ -190,11 +195,32 @@ export async function processOffice(
       if (/^(xl\/threadedComments|xl\/persons)\//.test(path)) next = next.replace(/\b(displayName|userId)="[^"]*"/g, '$1=""')
       if (next !== xml) authors = true
     }
+    if (kind === 'xlsx' && /^xl\/worksheets\/sheet\d+\.xml$/.test(path)) {
+      // numbers typed into cells (RRN/card/account without dashes, phones that lost the leading 0)
+      next = next.replace(/<c\b([^>]*)>(\s*<v>(\d{9,19})<\/v>\s*)<\/c>/g, (whole, attrs: string, _inner: string, num: string) => {
+        if (/\bt="/.test(attrs)) return whole
+        const candidate = /^1[016789]\d{7,8}$/.test(num) ? '0' + num : num
+        const ents = detect(candidate, detectOpts).filter((e) => e.start === 0 && e.end === candidate.length)
+        if (!ents.length) return whole
+        const r = applyMask(candidate, ents, new Set(), maskOpts, extraPrior())
+        addMapping(r.mapping)
+        numericCells++
+        for (const e of ents) masked.counts[e.type] = (masked.counts[e.type] ?? 0) + 1
+        const esc = r.text.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        return `<c${attrs} t="inlineStr"><is><t>${esc}</t></is></c>`
+      })
+    }
     if (path.endsWith('.rels')) {
       const before = next
       next = next.replace(/Target="(mailto:|tel:)([^"]*)"/g, (_m, scheme: string, value: string) => {
-        const decoded = decodeURIComponent(value.replace(/&amp;/g, '&'))
-        const r = applyMask(decoded, detect(decoded, detectOpts), new Set(), maskOpts, linkPrior)
+        let decoded = value.replace(/&amp;/g, '&')
+        try {
+          decoded = decodeURIComponent(decoded)
+        } catch {
+          /* malformed escape: mask the raw value */
+        }
+        const r = applyMask(decoded, detect(decoded, detectOpts), new Set(), maskOpts, extraPrior())
+        addMapping(r.mapping)
         return `Target="${scheme}${encodeURIComponent(r.text).replace(/%40/g, '@')}"`
       })
       if (next !== before) links = true
@@ -203,6 +229,7 @@ export async function processOffice(
   }
   if (authors) notes.push('메모·변경 추적의 작성자 이름을 지웠어요')
   if (links) notes.push('메일·전화 링크 속 개인정보도 가렸어요')
+  if (numericCells) notes.push(`숫자로 입력된 셀 ${numericCells}개(주민번호·카드·전화 등)도 가렸어요`)
 
   // metadata + previews
   for (const path of paths) {
@@ -233,9 +260,7 @@ export async function processOffice(
     }
   }
 
-  if (kind === 'docx' || kind === 'pptx' || kind === 'xlsx' || kind === 'hwpx') {
-    notes.push('문서 안의 이미지 속 글자는 가려지지 않아요. 필요하면 ‘이미지’ 탭을 이용하세요')
-  }
+  notes.push('문서 안의 이미지 속 글자는 가려지지 않아요. 필요하면 ‘이미지’ 탭을 이용하세요')
 
   const mime: Record<OfficeKind, string> = {
     docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

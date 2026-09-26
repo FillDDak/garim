@@ -79,3 +79,17 @@ describe('hidden personal data in documents', () => {
     expect(r.notes.join()).toContain('작성자')
   })
 })
+
+describe('xlsx numeric cells', () => {
+  it('masks RRN/phone numbers stored as numbers', async () => {
+    const zip = new JSZip()
+    zip.file('xl/worksheets/sheet1.xml', '<?xml version="1.0"?><worksheet><sheetData><row r="1"><c r="A1"><v>9001011234568</v></c><c r="B1" s="2"><v>1012345678</v></c><c r="C1"><v>2024</v></c></row></sheetData></worksheet>')
+    const r = await processOffice(await zip.generateAsync({ type: 'arraybuffer' }), 'xlsx', defaultDetectOptions(), { mode: 'token', tokenLang: 'ko', partialRedact: true }, [])
+    const out = await (await JSZip.loadAsync(await r.blob.arrayBuffer())).file('xl/worksheets/sheet1.xml')!.async('string')
+    expect(out).not.toContain('9001011234568')
+    expect(out).not.toContain('1012345678')
+    expect(out).toContain('<v>2024</v>')
+    expect(out).toContain('<c r="B1" s="2" t="inlineStr"><is><t>[전화_1]</t></is></c>')
+    expect(r.masked.mapping.map((m) => m.type)).toEqual(expect.arrayContaining(['rrn', 'phone']))
+  })
+})

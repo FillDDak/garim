@@ -88,6 +88,8 @@ export function FileView({ openInText }: { openInText: (text: string) => void })
   // keep a running mapping so numbering stays consistent across files processed together
   const runningMapping = useRef<MappingEntry[]>([])
 
+  const commitNow = useCallback((m?: MaskResult, name?: string) => m && commitMapping(m.mapping, name), [commitMapping])
+
   const patch = useCallback((id: string, p: Partial<Job>) => setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...p } : j))), [])
 
   const processOne = useCallback(
@@ -103,10 +105,12 @@ export function FileView({ openInText }: { openInText: (text: string) => void })
           const blob = new Blob([isCsv || dec.bom ? '﻿' : '', r.text], { type: 'text/plain;charset=utf-8' })
           const notes = dec.encoding !== 'utf-8' ? [`${dec.encoding.toUpperCase()} 인코딩을 자동으로 인식해 UTF-8로 저장했어요`] : []
           runningMapping.current.push(...r.mapping)
+          commitNow(r, job.file.name)
           patch(job.id, { status: 'done', masked: r, sourceText: dec.text, outputs: [{ label: '가린 파일', blob, name: `${stem(job.file.name)}_가림${ext(job.file.name)}`, primary: true }], notes })
         } else if (job.kind === 'pdf') {
           const res = await processPdf(await job.file.arrayBuffer(), settings.detect, maskOpts, prior, (p) => patch(job.id, { progress: p * 0.3 }))
           runningMapping.current.push(...res.masked.mapping)
+          commitNow(res.masked, job.file.name)
           const notes: string[] = []
           const red = await redactPdf(
             res,
@@ -133,6 +137,7 @@ export function FileView({ openInText }: { openInText: (text: string) => void })
         } else if (job.kind === 'docx' || job.kind === 'pptx' || job.kind === 'xlsx' || job.kind === 'hwpx') {
           const res = await processOffice(await job.file.arrayBuffer(), job.kind, settings.detect, maskOpts, prior)
           runningMapping.current.push(...res.masked.mapping)
+          commitNow(res.masked, job.file.name)
           patch(job.id, {
             status: 'done',
             masked: res.masked,
@@ -158,7 +163,7 @@ export function FileView({ openInText }: { openInText: (text: string) => void })
         patch(job.id, { status: 'error', error: '파일을 읽는 중 문제가 생겼어요. 암호가 걸려 있거나 손상된 파일일 수 있어요' })
       }
     },
-    [activeSession.mapping, settings.detect, settings.mask, settings.imageStyle, patch],
+    [activeSession.mapping, settings.detect, settings.mask, settings.imageStyle, patch, commitNow],
   )
 
   const addFiles = useCallback(

@@ -1,3 +1,4 @@
+import { escapeRe } from './util'
 import type { Confidence, EntitySource, EntityType } from './types'
 import {
   bizNoChecksum,
@@ -70,7 +71,6 @@ const detectRRN: Detector = (text) => {
       }
       continue
     }
-    if (g < 1 && g !== 0) continue
     if (!isValidBirthDate(front, g)) continue
     const isForeign = g >= 5 && g <= 8
     const type: EntityType = isForeign ? 'frn' : 'rrn'
@@ -363,7 +363,6 @@ const detectBirth: Detector = (text) => {
 }
 
 // ─── 이름 ──────────────────────────────────────────────────────────────────
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 const LOOSE_LABELS = NAME_LABELS.filter((l) => l.replace(/\\s\?/g, '').length >= 3 || ['이름', '성명', '성함'].includes(l))
 const NAME_LABEL_COLON_RE = new RegExp(

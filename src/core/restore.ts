@@ -1,3 +1,4 @@
+import { escapeRe } from './util'
 import type { EntityType, MappingEntry } from './types'
 import { TYPE_META } from './labels'
 
@@ -16,7 +17,6 @@ export interface RestoreResult {
   missing: MappingEntry[]
 }
 
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 const OPEN = '[\\[【〔［<(（{]'
 const CLOSE = '[\\]】〕］>)）}]'

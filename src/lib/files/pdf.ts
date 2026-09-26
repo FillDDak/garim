@@ -3,9 +3,8 @@ import { detect } from '../../core/engine'
 import { applyMask } from '../../core/mask'
 import type { DetectOptions, Entity, MappingEntry, MaskOptions, MaskResult } from '../../core/types'
 import { spanFraction } from '../textMetrics'
+import { assetUrl } from '../assetUrl'
 
-const BASE = import.meta.env.BASE_URL
-const abs = (p: string) => new URL(`${BASE}${p}`, window.location.href).href
 
 let pdfjsPromise: Promise<typeof import('pdfjs-dist/legacy/build/pdf.mjs')> | null = null
 async function pdfjs() {
@@ -42,10 +41,10 @@ export async function openPdf(data: ArrayBuffer): Promise<PDFDocumentProxy> {
   const lib = await pdfjs()
   return lib.getDocument({
     data: new Uint8Array(data),
-    cMapUrl: abs('pdfjs/cmaps/'),
+    cMapUrl: assetUrl('pdfjs/cmaps/'),
     cMapPacked: true,
-    standardFontDataUrl: abs('pdfjs/standard_fonts/'),
-    wasmUrl: abs('pdfjs/wasm/'),
+    standardFontDataUrl: assetUrl('pdfjs/standard_fonts/'),
+    wasmUrl: assetUrl('pdfjs/wasm/'),
   }).promise
 }
 
@@ -81,6 +80,12 @@ async function pageText(page: PDFPageProxy, offset: number): Promise<PageText> {
   return { text, items, offset }
 }
 
+/**
+ * A page with (almost) no text layer is most likely a scan. Scanner apps often add a page
+ * number or header as text, so a small amount of text still counts as a scan.
+ */
+const isScanLike = (text: string) => text.replace(/\s/g, '').length < 60
+
 export interface PdfResult {
   pageCount: number
   text: string
@@ -105,7 +110,7 @@ export async function processPdf(
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i)
     const pt = await pageText(page, full.length)
-    if (!pt.text.trim()) emptyPages++
+    if (isScanLike(pt.text)) emptyPages++
     pages.push(pt)
     full += pt.text + '\n\n'
     onProgress?.(i / doc.numPages)
@@ -163,7 +168,7 @@ export async function redactPdf(
     await page.render({ canvas, canvasContext: ctx, viewport: vp }).promise
     ctx.fillStyle = style === 'black' ? '#000' : '#fff'
     const pt = result.pages[i]
-    if (ocr && !pt.text.trim()) {
+    if (ocr && isScanLike(pt.text)) {
       const { detectInImage } = await import('../ocr')
       const { detections } = await detectInImage(canvas, ocr.detect)
       ctx.fillStyle = style === 'black' ? '#000' : '#fff'

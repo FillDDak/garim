@@ -182,7 +182,7 @@ export function applyMask(
         // never use a fake value that already appears in the source text
         while ((usedReplacements.has(rep) || (opts.mode === 'fake' && originalsLower.includes(rep.toLowerCase()))) && n < 9999) {
           n++
-          rep = makeFake(e.type, n, e.value, e.label)
+          rep = opts.mode === 'token' ? makeToken(e.type, n, opts.tokenLang, e.label) : makeFake(e.type, n, e.value, e.label)
         }
         counters.set(ck, n)
         usedReplacements.add(rep)

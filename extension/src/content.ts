@@ -144,6 +144,8 @@ document.addEventListener(
 // ─── Reveal originals inside the page (display only) ──────────────────────
 const originalText = new WeakMap<Text, string>()
 const touched = new Set<Text>()
+/** What we wrote into each node, to tell our own writes from the host app's. */
+const revealed = new WeakMap<Text, string>()
 let observer: MutationObserver | null = null
 let pending = 0
 
@@ -163,6 +165,7 @@ function revealNode(node: Text) {
     if (!originalText.has(node)) originalText.set(node, src)
     touched.add(node)
     node.data = r.text
+    revealed.set(node, r.text)
   }
 }
 
@@ -193,8 +196,11 @@ function applyReveal() {
     for (const m of muts) {
       if (m.type === 'characterData' && m.target.nodeType === 3) {
         const t = m.target as Text
-        // the app changed the text (e.g. streaming) – forget our cached original
-        if (touched.has(t) && !m.oldValue?.includes('_')) originalText.delete(t)
+        // the host app rewrote the text (e.g. streaming): its new text is the new original
+        if (touched.has(t) && t.data !== revealed.get(t)) {
+          originalText.delete(t)
+          touched.delete(t)
+        }
       }
     }
     if (pending) return

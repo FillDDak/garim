@@ -1,5 +1,6 @@
 import { DETECTORS, TYPE_PRIORITY, detectNamesStrong, type Candidate } from './detectors'
 import { isPlausibleName } from './names'
+import { escapeRe } from './util'
 import type { DetectOptions, Entity, EntityType } from './types'
 import { digitsOf } from './validators'
 
@@ -46,7 +47,6 @@ export function normalizeValue(type: EntityType, value: string): string {
   return value.trim().replace(/\s+/g, ' ')
 }
 
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 function customCandidates(text: string, opts: DetectOptions): Candidate[] {
   const out: Candidate[] = []
