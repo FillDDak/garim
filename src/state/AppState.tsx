@@ -53,6 +53,23 @@ function readSessions(retention: Retention): Session[] {
   return pruneSessions(load<Session[]>('sessions', []), retention)
 }
 
+/**
+ * Another tab wrote the full session list: take it as the source of truth for which sessions
+ * exist (so deletions propagate) while keeping any mapping entries only this tab knows about.
+ */
+function mergeSessions(local: Session[], incoming: Session[], keepId: string): { list: Session[]; changed: boolean } {
+  const localById = new Map(local.map((s) => [s.id, s]))
+  const list = incoming.map((inc) => {
+    const cur = localById.get(inc.id)
+    if (!cur) return inc
+    return { ...inc, title: inc.title || cur.title, mapping: mergeMapping(inc.mapping, cur.mapping), updatedAt: Math.max(cur.updatedAt, inc.updatedAt) }
+  })
+  const keep = localById.get(keepId)
+  if (keep && !list.some((s) => s.id === keepId)) list.unshift(keep)
+  const sig = (l: Session[]) => l.map((s) => `${s.id}:${s.mapping.length}`).join('|')
+  return { list, changed: sig(list) !== sig(local) }
+}
+
 function writeSessions(sessions: Session[], retention: Retention) {
   if (retention === 'tab') {
     try {
@@ -115,6 +132,34 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => save('settings', settings), [settings])
   useEffect(() => writeSessions(sessions, settings.retention), [sessions, settings.retention])
   useEffect(() => save('activeSession', activeId), [activeId])
+
+  // keep sessions in sync across tabs (mask in one tab, restore in another)
+  const activeIdRef = useRef(activeId)
+  useEffect(() => {
+    activeIdRef.current = activeId
+  }, [activeId])
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== 'garim:sessions' || !e.newValue) return
+      try {
+        const incoming = JSON.parse(e.newValue) as Session[]
+        setSessions((prev) => {
+          const merged = mergeSessions(prev, incoming, activeIdRef.current)
+          // this tab hasn't masked anything yet: follow the session the other tab is working in
+          const mine = merged.list.find((x) => x.id === activeIdRef.current)
+          if (!mine || mine.mapping.length === 0) {
+            const latest = merged.list.filter((x) => x.mapping.length > 0).sort((a, b) => b.updatedAt - a.updatedAt)[0]
+            if (latest) setActiveId(latest.id)
+          }
+          return merged.changed ? merged.list : prev
+        })
+      } catch {
+        /* ignore malformed data */
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
 
   // periodic retention pruning
   useEffect(() => {

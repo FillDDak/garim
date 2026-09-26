@@ -127,9 +127,19 @@ export function TextView({ goRestore }: { goRestore: () => void }) {
       toast('먼저 가릴 글을 입력해 주세요', 'warn')
       return
     }
-    const ok = await copyText(output)
+    // the preview may lag a frame behind typing (deferred render): always copy the latest text
+    let finalText = output
+    let finalMapping = result.mapping
+    if (deferred !== text) {
+      const ents = detect(text, detectOpts)
+      const ids = new Set(ents.filter(isDisabled).map((e) => e.id))
+      const r = applyMask(text, ents, ids, settings.mask, activeSession.mapping)
+      finalText = (settings.addNotice && settings.mask.mode === 'token' && r.mapping.length ? AI_NOTICE[settings.mask.tokenLang] : '') + r.text
+      finalMapping = r.mapping
+    }
+    const ok = await copyText(finalText)
     if (ok) {
-      commitMapping(result.mapping, text)
+      commitMapping(finalMapping, text)
       setCopied(true)
       toast(
         settings.mask.mode === 'redact'
@@ -138,7 +148,7 @@ export function TextView({ goRestore }: { goRestore: () => void }) {
         'success',
       )
     } else toast('복사에 실패했어요. 결과 영역을 직접 선택해 복사해 주세요', 'warn')
-  }, [text, output, commitMapping, result.mapping, settings.mask.mode, toast])
+  }, [text, deferred, output, commitMapping, result.mapping, detectOpts, isDisabled, settings.mask, settings.addNotice, activeSession.mapping, toast])
 
   const quickClipboard = useCallback(async () => {
     const clip = await readText()
