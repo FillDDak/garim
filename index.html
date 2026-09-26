@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>가림 — AI에 보내기 전 개인정보 가리기</title>
+    <meta name="description" content="ChatGPT·Claude에 붙여넣기 전, 주민번호·전화번호·계좌·이름·API 키를 브라우저 안에서 자동으로 가리고 AI 답변은 원래대로 되돌려 주는 오프라인 개인정보 가림 도구. 문서·PDF·캡처 이미지까지." />
+    <meta name="theme-color" content="#f4f5f8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0c0d12" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="referrer" content="no-referrer" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="가림 — AI에 보내기 전 개인정보 가리기" />
+    <meta property="og:description" content="개인정보는 가려서 보내고, AI 답변은 원래대로. 서버 전송 0, 완전 오프라인." />
+    <meta property="og:image" content="og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <script>
+      // apply the saved theme before first paint to avoid a flash
+      try {
+        var s = JSON.parse(localStorage.getItem('garim:settings') || '{}')
+        if (s.theme === 'light' || s.theme === 'dark') document.documentElement.setAttribute('data-theme', s.theme)
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>가림은 자바스크립트가 필요해요. 모든 처리는 브라우저 안에서만 이뤄집니다.</noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
