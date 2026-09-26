@@ -161,8 +161,18 @@ function Shell() {
               <span>입력한 글은 이 브라우저 밖으로 절대 나가지 않아요. 인터넷을 꺼도 동작합니다.</span>
             </div>
             <div className="intro-actions">
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => {
+                  go('guide')
+                  window.setTimeout(() => document.getElementById('extension')?.scrollIntoView({ behavior: 'smooth' }), 80)
+                }}
+              >
+                브라우저 확장
+              </button>
               <button type="button" className="link-btn" onClick={() => go('guide')}>
-                작동 방식 보기
+                작동 방식
               </button>
               <button type="button" className="icon-btn" onClick={hideIntro} aria-label="안내 닫기">
                 <X size={16} />

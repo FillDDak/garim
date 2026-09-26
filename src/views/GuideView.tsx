@@ -1,4 +1,4 @@
-import { Bot, ClipboardCheck, FileLock2, ImageOff, KeyRound, Lock, PlaneTakeoff, ScanSearch, Undo2, WifiOff } from 'lucide-react'
+import { Bot, ClipboardCheck, Puzzle, FileLock2, ImageOff, KeyRound, Lock, PlaneTakeoff, ScanSearch, Undo2, WifiOff } from 'lucide-react'
 import { Card } from '../components/ui'
 import { GithubMark } from '../components/Logo'
 
@@ -105,6 +105,41 @@ export function GuideView({ go }: { go: (route: string) => void }) {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="extension" id="extension">
+        <Card className="ext-card">
+          <div className="ext-text">
+            <p className="eyebrow">브라우저 확장 프로그램</p>
+            <h2>붙여넣는 순간 알아서 가리기</h2>
+            <p>
+              확장 프로그램을 설치하면 ChatGPT·Claude·Gemini·Perplexity·Copilot·뤼튼·클로바X 입력창에 글을 붙여넣을 때 <b>자동으로 개인정보가 가려져</b> 들어가고, AI 답변에서는 자리표시자가{' '}
+              <b>원래 값으로 보여요</b>(내 화면에서만). 복사할 때도 원래 값으로 복사됩니다.
+            </p>
+            <ol>
+              <li>아래 버튼으로 파일을 받아 압축을 풉니다.</li>
+              <li>
+                크롬은 <code>chrome://extensions</code>, 엣지는 <code>edge://extensions</code>, 웨일은 <code>whale://extensions</code>를 주소창에 입력합니다.
+              </li>
+              <li>오른쪽 위 <b>개발자 모드</b>를 켜고 <b>압축해제된 확장 프로그램을 로드</b> → 풀어 둔 폴더를 선택합니다.</li>
+            </ol>
+            <a className="btn btn-primary btn-lg" href="garim-extension.zip" download>
+              <Puzzle size={17} />
+              <span>확장 프로그램 받기 (.zip)</span>
+            </a>
+          </div>
+          <div className="ext-demo" aria-hidden="true">
+            <div className="ext-demo-input">
+              <span className="chip static g-person">[이름_1]</span> 과장님께 <span className="chip static g-contact">[전화_1]</span>로 연락…
+            </div>
+            <div className="ext-demo-toast">
+              <b>가림</b> 개인정보 3곳을 가려서 붙여넣었어요 <em>원문으로</em>
+            </div>
+            <div className="ext-demo-answer">
+              네, <mark>김민수</mark> 과장님께 <mark>010-1234-5678</mark>로 연락드리겠습니다.
+            </div>
+          </div>
+        </Card>
       </section>
 
       <section className="faq">

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>가림</title>
+    <style>
+      :root { color-scheme: light dark; --bg: #fff; --t: #121521; --m: #6b7285; --b: #e3e6ec; --a: #5a3ff5; --s: #f4f5f8; }
+      @media (prefers-color-scheme: dark) { :root { --bg: #15171f; --t: #eceef4; --m: #9097a8; --b: #2a2e3b; --a: #8e7bff; --s: #1b1e27; } }
+      body { margin: 0; width: 300px; background: var(--bg); color: var(--t); font: 13.5px/1.5 -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif; }
+      header { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--b); }
+      header img { width: 28px; height: 28px; }
+      header b { font-size: 16px; }
+      header span { display: block; color: var(--m); font-size: 11.5px; }
+      section { padding: 6px 16px; }
+      label.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--b); cursor: pointer; }
+      label.row small { display: block; color: var(--m); font-size: 11.5px; }
+      input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--a); }
+      select { font: inherit; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--b); background: var(--s); color: var(--t); }
+      .stat { margin: 10px 16px; padding: 10px 12px; background: var(--s); border-radius: 10px; color: var(--m); font-size: 12.5px; }
+      .stat b { color: var(--t); }
+      footer { display: flex; gap: 8px; padding: 8px 16px 16px; }
+      button { flex: 1; font: inherit; font-weight: 650; padding: 8px; border-radius: 9px; border: 1px solid var(--b); background: var(--bg); color: var(--t); cursor: pointer; }
+      button.primary { background: var(--a); border-color: var(--a); color: #fff; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <img src="icons/48.png" alt="" />
+      <div><b>가림</b><span>붙여넣는 순간 개인정보 자동 가림</span></div>
+    </header>
+    <section>
+      <label class="row"><span>자동 가림 사용<small>AI 사이트 입력창에 붙여넣을 때</small></span><input type="checkbox" id="enabled" /></label>
+      <label class="row"><span>가리는 방식</span>
+        <select id="mode"><option value="token">자리표시자 [이름_1]</option><option value="fake">가짜 값 (김가온)</option></select>
+      </label>
+      <label class="row"><span>AI 안내문 붙이기<small>대화의 첫 붙여넣기에 한 번</small></span><input type="checkbox" id="notice" /></label>
+      <label class="row"><span>답변에 원래 값 표시<small>이 화면에서만 바뀌어 보여요</small></span><input type="checkbox" id="reveal" /></label>
+    </section>
+    <div class="stat" id="stat">불러오는 중…</div>
+    <footer>
+      <button id="clear">복원 키 지우기</button>
+      <button id="open" class="primary">웹앱 열기</button>
+    </footer>
+    <script src="popup.js"></script>
+  </body>
+</html>

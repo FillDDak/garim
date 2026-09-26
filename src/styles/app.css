@@ -1845,6 +1845,86 @@ input[type='checkbox'] {
   line-height: 1.6;
 }
 
+/* extension section */
+.extension {
+  margin-top: 48px;
+}
+.ext-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 28px;
+  padding: 30px;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 10%, var(--surface)), var(--surface) 60%);
+}
+.ext-text h2 {
+  font-size: 24px;
+  letter-spacing: -0.03em;
+  margin: 0 0 10px;
+}
+.ext-text p {
+  color: var(--text-2);
+  margin: 0 0 12px;
+}
+.ext-text .eyebrow {
+  margin-bottom: 12px;
+}
+.ext-text ol {
+  margin: 0 0 20px;
+  padding-left: 20px;
+  color: var(--text-2);
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ext-text code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--surface-3);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+.ext-demo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  justify-content: center;
+}
+.ext-demo-input,
+.ext-demo-answer {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  line-height: 1.8;
+}
+.ext-demo-answer mark {
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline 2px color-mix(in srgb, var(--accent) 60%, transparent);
+  text-underline-offset: 4px;
+}
+.ext-demo-toast {
+  align-self: flex-end;
+  background: #16181f;
+  color: #f2f3f7;
+  border-radius: 12px;
+  padding: 9px 14px;
+  font-size: 13px;
+  box-shadow: var(--shadow-lg);
+}
+.ext-demo-toast b,
+.ext-demo-toast em {
+  color: #b6a8ff;
+  font-style: normal;
+  font-weight: 700;
+}
+.ext-demo-toast em {
+  margin-left: 8px;
+}
+
 /* ───────────────────────── Toasts ───────────────────────── */
 .toasts {
   position: fixed;
@@ -1993,6 +2073,10 @@ input[type='checkbox'] {
   }
   .steps {
     grid-template-columns: 1fr;
+  }
+  .ext-card {
+    grid-template-columns: 1fr;
+    padding: 20px;
   }
   .feature-grid {
     grid-template-columns: 1fr;

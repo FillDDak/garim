@@ -6,3 +6,5 @@ public/ocr
 coverage
 public/pdfjs
 .scratch
+extension/dist
+public/garim-extension.zip

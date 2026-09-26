@@ -6,11 +6,12 @@
   "scripts": {
     "predev": "node scripts/copy-assets.mjs",
     "dev": "vite",
-    "prebuild": "node scripts/copy-assets.mjs",
+    "prebuild": "node scripts/copy-assets.mjs && node scripts/build-extension.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "lint": "oxlint"
+    "lint": "oxlint",
+    "build:extension": "node scripts/build-extension.mjs"
   },
   "dependencies": {
     "jszip": "^3.10.2",
