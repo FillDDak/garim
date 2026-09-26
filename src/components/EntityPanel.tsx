@@ -25,7 +25,7 @@ interface Props {
 
 const CONF_LABEL = { high: '확실', medium: '유력', low: '추정' } as const
 
-export function groupEntities(entities: Entity[]) {
+function groupEntities(entities: Entity[]) {
   const groups = new Map<EntityType, Map<string, EntityGroupItem>>()
   for (const e of entities) {
     const key = entityKey(e.type, e.value, e.label)

@@ -8,7 +8,7 @@ export function charWeight(ch: string): number {
   if (/[A-Z@#%&MW]/.test(ch)) return 0.68
   if (/[a-z]/.test(ch)) return 0.52
   if (/[.,:;'!|il]/.test(ch)) return 0.28
-  if (/[-()\[\]/]/.test(ch)) return 0.36
+  if (/[-()[\]/]/.test(ch)) return 0.36
   return 0.55
 }
 

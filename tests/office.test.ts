@@ -33,3 +33,35 @@ describe('office', () => {
     expect(core).not.toContain('홍길동')
   })
 })
+
+describe('office formats', () => {
+  const opts = { mode: 'token' as const, tokenLang: 'ko' as const, partialRedact: true }
+  it('xlsx shared strings', async () => {
+    const zip = new JSZip()
+    zip.file('xl/sharedStrings.xml', '<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>성명</t></si><si><t>김철수</t></si><si><r><t>010-1111-</t></r><r><t>2222</t></r></si></sst>')
+    const r = await processOffice(await zip.generateAsync({ type: 'arraybuffer' }), 'xlsx', defaultDetectOptions(), opts, [])
+    const out = await (await JSZip.loadAsync(await r.blob.arrayBuffer())).file('xl/sharedStrings.xml')!.async('string')
+    expect(out).not.toContain('김철수')
+    expect(out).not.toContain('2222')
+  })
+  it('pptx slides', async () => {
+    const zip = new JSZip()
+    zip.file('ppt/slides/slide1.xml', '<?xml version="1.0"?><p:sld xmlns:p="p" xmlns:a="a"><a:p><a:r><a:t>이메일 hong@test.co.kr</a:t></a:r></a:p></p:sld>')
+    const r = await processOffice(await zip.generateAsync({ type: 'arraybuffer' }), 'pptx', defaultDetectOptions(), opts, [])
+    const out = await (await JSZip.loadAsync(await r.blob.arrayBuffer())).file('ppt/slides/slide1.xml')!.async('string')
+    expect(out).toContain('[이메일_1]')
+  })
+  it('hwpx sections, preview text and stored mimetype', async () => {
+    const zip = new JSZip()
+    zip.file('mimetype', 'application/hwp+zip')
+    zip.file('Contents/section0.xml', '<?xml version="1.0"?><hs:sec xmlns:hs="s" xmlns:hp="p"><hp:p><hp:run><hp:t>주민번호 900101-1234568<hp:tab/>끝</hp:t></hp:run></hp:p></hs:sec>')
+    zip.file('Preview/PrvText.txt', '주민번호 900101-1234568')
+    const r = await processOffice(await zip.generateAsync({ type: 'arraybuffer' }), 'hwpx', defaultDetectOptions(), opts, [])
+    const z2 = await JSZip.loadAsync(await r.blob.arrayBuffer())
+    const sec = await z2.file('Contents/section0.xml')!.async('string')
+    expect(sec).toContain('[주민번호_1]')
+    expect(sec).toContain('<hp:tab/>')
+    expect(await z2.file('Preview/PrvText.txt')!.async('string')).not.toContain('1234568')
+    expect(Object.keys(z2.files)[0]).toBe('mimetype')
+  })
+})

@@ -211,7 +211,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function useApp(): AppStateValue {
   const v = useContext(Ctx)
   if (!v) throw new Error('useApp outside provider')

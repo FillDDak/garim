@@ -1325,9 +1325,15 @@ input[type='checkbox'] {
   background: #ffe3e6;
   color: #cc2a3c;
 }
-:root[data-theme='dark'] .job-icon,
-.job-icon {
-  filter: none;
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .job-icon[class*='kind-'] {
+    background: var(--surface-3);
+    color: var(--accent-2);
+  }
+}
+:root[data-theme='dark'] .job-icon[class*='kind-'] {
+  background: var(--surface-3);
+  color: var(--accent-2);
 }
 .job-info {
   flex: 1;
@@ -1969,10 +1975,13 @@ input[type='checkbox'] {
   .workspace.with-panel {
     grid-template-columns: minmax(0, 1fr);
   }
-  .workspace .pane-input,
+  .workspace .pane-input {
+    height: 48vh;
+    min-height: 300px;
+  }
   .workspace .pane-output {
-    height: 56vh;
-    min-height: 340px;
+    height: 66vh;
+    min-height: 380px;
   }
   .restore-grid {
     grid-template-columns: minmax(0, 1fr);

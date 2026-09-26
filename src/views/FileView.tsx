@@ -10,6 +10,7 @@ import {
   FolderUp,
   Loader2,
   Presentation,
+  Sparkles,
   Trash2,
   Type,
 } from 'lucide-react'
@@ -22,6 +23,7 @@ import { Button, Card, CardHeader, Segmented } from '../components/ui'
 import { useApp } from '../state/AppState'
 import { downloadBlob } from '../lib/clipboard'
 import { newId } from '../lib/sessions'
+import { makeSampleDocx } from '../lib/sampleDocx'
 import { decodeTextFile, isPlainTextFile } from '../lib/files/text'
 import { officeKind, processOffice } from '../lib/files/office'
 import { processPdf, redactPdf, type PdfResult } from '../lib/files/pdf'
@@ -236,6 +238,11 @@ export function FileView({ openInText }: { openInText: (text: string) => void })
             </span>
             <span className="dz-meta">파일은 업로드되지 않아요 · 여러 개를 한 번에 · 문서 작성자 정보도 함께 지움</span>
           </button>
+          <div className="drop-extra">
+            <button type="button" className="link-btn" onClick={async () => addFiles([await makeSampleDocx()])}>
+              <Sparkles size={14} /> 예시 Word 문서로 체험해 보기
+            </button>
+          </div>
         </Card>
         <Card className="file-options">
           <CardHeader title="바꾸는 방식" />
