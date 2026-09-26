@@ -2,17 +2,17 @@ import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
 import { detect } from '../../core/engine'
 import { applyMask } from '../../core/mask'
 import type { DetectOptions, Entity, MappingEntry, MaskOptions, MaskResult } from '../../core/types'
-import { charWeight } from '../textMetrics'
+import { spanFraction } from '../textMetrics'
 
 const BASE = import.meta.env.BASE_URL
 const abs = (p: string) => new URL(`${BASE}${p}`, window.location.href).href
 
-let pdfjsPromise: Promise<typeof import('pdfjs-dist')> | null = null
+let pdfjsPromise: Promise<typeof import('pdfjs-dist/legacy/build/pdf.mjs')> | null = null
 async function pdfjs() {
   if (!pdfjsPromise) {
     pdfjsPromise = (async () => {
-      const lib = await import('pdfjs-dist')
-      const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+      const lib = await import('pdfjs-dist/legacy/build/pdf.mjs')
+      const worker = await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')
       lib.GlobalWorkerOptions.workerSrc = worker.default
       return lib
     })()
@@ -26,6 +26,7 @@ interface Item {
   y: number
   width: number
   size: number
+  family: string
   start: number
   end: number
 }
@@ -69,7 +70,8 @@ async function pageText(page: PDFPageProxy, offset: number): Promise<PageText> {
         if (gap > size * 0.2 && lastChar !== ' ' && lastChar !== '\n' && !raw.str.startsWith(' ')) text += ' '
       }
     }
-    const item: Item = { str: raw.str, x, y, width: raw.width, size, start: offset + text.length, end: 0 }
+    const family = content.styles[raw.fontName]?.fontFamily ?? 'sans-serif'
+    const item: Item = { str: raw.str, x, y, width: raw.width, size, family, start: offset + text.length, end: 0 }
     text += raw.str
     item.end = offset + text.length
     items.push(item)
@@ -113,16 +115,19 @@ export async function processPdf(
   return { pageCount: doc.numPages, text: full, entities, masked, emptyPages, doc, pages }
 }
 
-/** Width fraction of `str` up to character index `i`, using rough glyph weights. */
-function fracAt(str: string, i: number): number {
-  let total = 0
-  let upto = 0
-  for (let k = 0; k < str.length; k++) {
-    const w = charWeight(str[k])
-    total += w
-    if (k < i) upto += w
+let measureCtx: CanvasRenderingContext2D | null = null
+
+/** Width fraction of `str` up to character index `i`, measured with the run's font family. */
+function fracAt(str: string, i: number, family: string): number {
+  if (i <= 0) return 0
+  if (i >= str.length) return 1
+  measureCtx ??= document.createElement('canvas').getContext('2d')
+  if (measureCtx) {
+    measureCtx.font = `100px ${family}, sans-serif`
+    const total = measureCtx.measureText(str).width
+    if (total > 0) return measureCtx.measureText(str.slice(0, i)).width / total
   }
-  return total ? upto / total : 0
+  return spanFraction(str, 0, i)[1]
 }
 
 export type BoxStyle = 'black' | 'white'
@@ -159,9 +164,9 @@ export async function redactPdf(
         if (it.end <= e.start || it.start >= e.end || it.end === it.start) continue
         const s = Math.max(e.start, it.start) - it.start
         const en = Math.min(e.end, it.end) - it.start
-        const x1 = it.x + it.width * fracAt(it.str, s)
-        const x2 = it.x + it.width * fracAt(it.str, en)
-        const pad = it.size * 0.12
+        const x1 = it.x + it.width * fracAt(it.str, s, it.family)
+        const x2 = it.x + it.width * fracAt(it.str, en, it.family)
+        const pad = it.size * 0.18
         const [ax, ay] = vp.convertToViewportPoint(x1 - pad, it.y - it.size * 0.3) as [number, number]
         const [bx, by] = vp.convertToViewportPoint(x2 + pad, it.y + it.size * 1.0) as [number, number]
         const rect = [ax, ay, bx, by]

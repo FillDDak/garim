@@ -446,7 +446,7 @@ export const TYPE_PRIORITY: Record<EntityType, number> = {
   driver: 70,
   bizno: 66,
   account: 64,
-  phone: 62,
+  phone: 65,
   email: 60,
   passport: 55,
   birth: 50,

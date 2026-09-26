@@ -80,7 +80,7 @@ function adjacentNames(text: string, anchors: Candidate[]): Candidate[] {
     if (!anchorTypes.has(a.type) || a.confidence === 'low') continue
     // preceding word: "홍길동 010-..." / "홍길동, 010-..." / "홍길동(010-...)" / "홍길동\t010"
     const pre = text.slice(Math.max(0, a.start - 12), a.start)
-    const pm = pre.match(/(?:^|[^가-힣])([가-힣]{2,4})(?:\s*[,/|:\t(（]\s*|\s+)$/)
+    const pm = pre.match(/(?:^|[^가-힣])([가-힣]{2,4})(?:\s*[,/|\t(（]\s*|\s+)$/)
     if (pm && isPlausibleName(pm[1])) {
       const start = a.start - pm[0].length + pm[0].indexOf(pm[1])
       out.push({ type: 'name', start, end: start + pm[1].length, confidence: 'medium', source: 'context', note: '연락처 옆 이름' })
