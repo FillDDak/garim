@@ -65,3 +65,17 @@ describe('office formats', () => {
     expect(Object.keys(z2.files)[0]).toBe('mimetype')
   })
 })
+
+describe('hidden personal data in documents', () => {
+  it('scrubs tracked-change authors and mailto links', async () => {
+    const zip = new JSZip()
+    zip.file('word/document.xml', `<?xml version="1.0"?><w:document ${W}><w:body><w:p><w:ins w:id="1" w:author="홍길동" w:date="2026-01-01"><w:r><w:t>안녕</w:t></w:r></w:ins></w:p></w:body></w:document>`)
+    zip.file('word/_rels/document.xml.rels', '<?xml version="1.0"?><Relationships><Relationship Id="rId9" Type="hyperlink" Target="mailto:gildong@corp.co.kr" TargetMode="External"/></Relationships>')
+    const r = await processOffice(await zip.generateAsync({ type: 'arraybuffer' }), 'docx', defaultDetectOptions(), { mode: 'token', tokenLang: 'ko', partialRedact: true }, [])
+    const z = await JSZip.loadAsync(await r.blob.arrayBuffer())
+    expect(await z.file('word/document.xml')!.async('string')).not.toContain('홍길동')
+    const rels = await z.file('word/_rels/document.xml.rels')!.async('string')
+    expect(rels).not.toContain('gildong')
+    expect(r.notes.join()).toContain('작성자')
+  })
+})

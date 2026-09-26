@@ -173,6 +173,37 @@ export async function processOffice(
     zip.file(c.path, out)
   }
 
+  // authors of comments / tracked changes, and personal data hidden in hyperlinks
+  const linkPrior = [...prior, ...masked.mapping]
+  let authors = false
+  let links = false
+  for (const path of paths) {
+    if (!/\.(xml|rels)$/.test(path)) continue
+    const file = zip.file(path)
+    if (!file) continue
+    const xml = await file.async('string')
+    let next = xml
+    if (/^(word|ppt|xl)\//.test(path)) {
+      next = next.replace(/\b(w:author|w:initials|w15:author|w15:userId|w15:providerId)="[^"]*"/g, (_m, a) => `${a}=""`)
+      if (/^ppt\/commentAuthors\.xml$/.test(path)) next = next.replace(/\b(name|initials)="[^"]*"/g, '$1=""')
+      if (/^xl\/comments\d*\.xml$/.test(path)) next = next.replace(/<author>[^<]*<\/author>/g, '<author></author>')
+      if (/^(xl\/threadedComments|xl\/persons)\//.test(path)) next = next.replace(/\b(displayName|userId)="[^"]*"/g, '$1=""')
+      if (next !== xml) authors = true
+    }
+    if (path.endsWith('.rels')) {
+      const before = next
+      next = next.replace(/Target="(mailto:|tel:)([^"]*)"/g, (_m, scheme: string, value: string) => {
+        const decoded = decodeURIComponent(value.replace(/&amp;/g, '&'))
+        const r = applyMask(decoded, detect(decoded, detectOpts), new Set(), maskOpts, linkPrior)
+        return `Target="${scheme}${encodeURIComponent(r.text).replace(/%40/g, '@')}"`
+      })
+      if (next !== before) links = true
+    }
+    if (next !== xml) zip.file(path, next)
+  }
+  if (authors) notes.push('메모·변경 추적의 작성자 이름을 지웠어요')
+  if (links) notes.push('메일·전화 링크 속 개인정보도 가렸어요')
+
   // metadata + previews
   for (const path of paths) {
     const scrub = ['docProps/core.xml', 'docProps/app.xml', 'Contents/content.hpf'].includes(path)
