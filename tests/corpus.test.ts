@@ -79,3 +79,17 @@ describe('name patterns', () => {
     expect(found('서울특별시 송파구 010-1234-5678').filter((x) => x.startsWith('name'))).toEqual([])
   })
 })
+
+describe('structured data', () => {
+  it('json', () => {
+    const r = found('{"customer_name": "홍길동", "phone": "010-1111-2222", "email": "gd@x.io", "userName": "Jane Doe"}')
+    expect(r).toEqual(expect.arrayContaining(['name:홍길동', 'phone:010-1111-2222', 'email:gd@x.io', 'name:Jane Doe']))
+  })
+  it('csv rows', () => {
+    const r = found('이름,전화,메모\n김하늘,010-2222-3333,VIP\n오세훈,010-4444-5555,')
+    expect(r).toEqual(expect.arrayContaining(['name:김하늘', 'name:오세훈']))
+  })
+  it('english prose after To:', () => {
+    expect(found('To: the team, please review').filter((x) => x.startsWith('name'))).toEqual([])
+  })
+})

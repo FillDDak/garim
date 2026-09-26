@@ -367,7 +367,7 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 const LOOSE_LABELS = NAME_LABELS.filter((l) => l.replace(/\\s\?/g, '').length >= 3 || ['이름', '성명', '성함'].includes(l))
 const NAME_LABEL_COLON_RE = new RegExp(
-  `(?<![${H}A-Za-z])(?:${NAME_LABELS.join('|')}|name|full name|customer|From|To|Cc|보낸\\s?사람|받는\\s?사람)\\s*(?:\\([^)]{0,10}\\))?\\s*[:：]\\s*([${H}]{2,5}|[A-Z][a-z]+(?: [A-Z][a-z]+){1,2})(?![${H}A-Za-z])`,
+  `(?<![${H}A-Za-z])(?:${NAME_LABELS.join('|')}|(?:customer|user|full|first|last|real|display|contact|account|holder)?[_ -]?name|customer|From|To|Cc|보낸\\s?사람|받는\\s?사람)["']?\\s*(?:\\([^)]{0,10}\\))?\\s*[:：=]\\s*["']?([${H}]{2,5}|[A-Z][a-z]+(?: [A-Z][a-z]+){1,2})(?![${H}A-Za-z])`,
   'gid',
 )
 const NAME_LABEL_SPACE_RE = new RegExp(`(?<![${H}])(?:${LOOSE_LABELS.join('|')})\\s+([${H}]{2,4})(?![${H}])`, 'gid')
@@ -386,6 +386,8 @@ export const detectNamesBasic: Detector = (text) => {
     const r = groupRange(m, 1)
     if (!r) continue
     let value = m[1]
+    // English names must really be capitalised (the regex runs case-insensitively for the labels)
+    if (/^[A-Za-z]/.test(value) && !/^[A-Z][a-z]+(?: [A-Z][a-z]+){1,2}$/.test(value)) continue
     // "홍길동님" → drop honorific
     const honor = value.match(/(님|씨)$/)
     if (honor && value.length > 3) value = value.slice(0, -honor[0].length)
