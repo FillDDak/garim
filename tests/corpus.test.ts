@@ -75,5 +75,7 @@ describe('name patterns', () => {
   it('does not flag intro without a name', () => {
     expect(found('안녕하세요, 고객센터입니다.')).toEqual([])
     expect(found('안녕하세요 반갑습니다')).toEqual([])
+    expect(found('서울특별시 송파구 올림픽로 300').filter((x) => x.startsWith('name'))).toEqual([])
+    expect(found('서울특별시 송파구 010-1234-5678').filter((x) => x.startsWith('name'))).toEqual([])
   })
 })

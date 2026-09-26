@@ -171,6 +171,13 @@ export function detect(text: string, opts: DetectOptions): Entity[] {
     })
   }
 
+  // "서울특별시 송파구", "성남시 분당구": district names are not people
+  cands = cands.filter((c) => {
+    if (c.type !== 'name') return true
+    const pre = text.slice(Math.max(0, c.start - 8), c.start)
+    return !(/(?:특별시|광역시|자치시|자치도|[가-힣]시|[가-힣]도|서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)\s+$/.test(pre) && /[구군시동읍면]$/.test(c.end - c.start ? text.slice(c.end - 1, c.end) : ''))
+  })
+
   const accepted = resolveOverlaps(cands)
   const all = [...accepted, ...propagate(text, accepted)].sort((a, b) => a.start - b.start)
   return all.map((c) => ({

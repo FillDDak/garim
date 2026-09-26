@@ -2168,3 +2168,6 @@ input[type='checkbox'] {
 .pane .plain-textarea:not(.small):focus {
   box-shadow: none;
 }
+.field .segmented {
+  align-self: flex-start;
+}

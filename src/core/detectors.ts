@@ -372,7 +372,7 @@ const NAME_LABEL_COLON_RE = new RegExp(
 )
 const NAME_LABEL_SPACE_RE = new RegExp(`(?<![${H}])(?:${LOOSE_LABELS.join('|')})\\s+([${H}]{2,4})(?![${H}])`, 'gid')
 const PARTICLE_ALT = KOREAN_PARTICLES.map(escapeRe).join('|')
-const LONG_TITLES = NAME_TITLES.filter((t) => t.length >= 2).map(escapeRe).join('|')
+const LONG_TITLES = NAME_TITLES.filter((t) => t.length >= 2).map(escapeRe).join('|') + '|(?:드림|올림|배상)(?![가-힣])'
 const SHORT_TITLES = NAME_TITLES.filter((t) => t.length === 1).map(escapeRe).join('|')
 const NAME_TITLE_RE = new RegExp(
   `(?<![${H}])([${H}]{3,4}?)\\s?(?:(?:${LONG_TITLES})|(?:${SHORT_TITLES})(?:${PARTICLE_ALT}|이에요|이세요|입니다|이신|께|에게|한테)?(?![${H}]))`,
