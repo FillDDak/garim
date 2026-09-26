@@ -34,6 +34,12 @@ AI 답변: [이름_1] 과장님께 보낼 메일 초안입니다 …
 되돌리기: 김민수 과장님께 보낼 메일 초안입니다 …
 ```
 
+<p align="center"><img src="docs/text.png" alt="텍스트 가리기 화면" width="100%" /></p>
+
+| AI 답변 되돌리기 | 캡처 이미지 OCR 가림 |
+| --- | --- |
+| <img src="docs/restore.png" alt="되돌리기 화면" /> | <img src="docs/image.png" alt="이미지 가림 화면" /> |
+
 ## 주요 기능
 
 | 기능 | 설명 |

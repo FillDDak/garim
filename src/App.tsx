@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { CheckCircle2, FileText, Image as ImageIcon, Info, Loader2, Moon, Settings2, ShieldCheck, Sun, TriangleAlert, Undo2, WifiOff, X } from 'lucide-react'
 import { AppStateProvider, useApp } from './state/AppState'
 import { Logo } from './components/Logo'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { TextView } from './views/TextView'
 import { RestoreView } from './views/RestoreView'
 import { SettingsView } from './views/SettingsView'
@@ -120,7 +121,13 @@ function Shell() {
           </button>
           <nav className="nav" aria-label="주요 메뉴">
             {NAV.map((n) => (
-              <button key={n.id} type="button" className={`nav-item ${route === n.id ? 'active' : ''}`} onClick={() => go(n.id)} aria-current={route === n.id ? 'page' : undefined}>
+              <button
+                key={n.id}
+                type="button"
+                className={`nav-item ${route === n.id ? 'active' : ''}`}
+                onClick={() => go(n.id)}
+                aria-current={route === n.id ? 'page' : undefined}
+              >
                 {n.icon}
                 <span className="nav-label">{n.label}</span>
                 <span className="nav-short">{n.short}</span>
@@ -180,27 +187,29 @@ function Shell() {
             </div>
           </div>
         )}
-        {route === 'text' && <TextView goRestore={() => go('restore')} />}
-        {route === 'restore' && <RestoreView />}
-        <Suspense
-          fallback={
-            <div className="loading">
-              <Loader2 className="spin" size={22} />
-            </div>
-          }
-        >
-          {route === 'files' && (
-            <FileView
-              openInText={(t) => {
-                setPendingText(t)
-                go('text')
-              }}
-            />
-          )}
-          {route === 'image' && <ImageView />}
-        </Suspense>
-        {route === 'settings' && <SettingsView />}
-        {route === 'guide' && <GuideView go={go} />}
+        <ErrorBoundary key={route}>
+          {route === 'text' && <TextView goRestore={() => go('restore')} />}
+          {route === 'restore' && <RestoreView />}
+          <Suspense
+            fallback={
+              <div className="loading">
+                <Loader2 className="spin" size={22} />
+              </div>
+            }
+          >
+            {route === 'files' && (
+              <FileView
+                openInText={(t) => {
+                  setPendingText(t)
+                  go('text')
+                }}
+              />
+            )}
+            {route === 'image' && <ImageView />}
+          </Suspense>
+          {route === 'settings' && <SettingsView />}
+          {route === 'guide' && <GuideView go={go} />}
+        </ErrorBoundary>
       </main>
 
       <footer className="footer">
