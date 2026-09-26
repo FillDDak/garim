@@ -161,6 +161,7 @@ function Shell() {
       </header>
 
       <main id="main" className="main">
+        {route !== 'guide' && <h1 className="sr-only">가림 — {NAV.find((n) => n.id === route)?.label}</h1>}
         {route === 'text' && !introHidden && (
           <div className="intro">
             <div className="intro-text">

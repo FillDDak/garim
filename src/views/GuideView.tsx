@@ -71,6 +71,7 @@ export function GuideView({ go }: { go: (route: string) => void }) {
         </div>
       </section>
 
+      <h2 className="sr-only">사용 방법</h2>
       <section className="steps">
         {[
           { icon: <ClipboardCheck size={22} />, t: '1. 붙여넣기', d: '원문을 붙여넣으면 개인정보가 색깔별로 표시돼요. 드래그로 원하는 부분을 더 가릴 수 있어요.' },
