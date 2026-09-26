@@ -2164,3 +2164,7 @@ input[type='checkbox'] {
     height: 42px;
   }
 }
+
+.pane .plain-textarea:not(.small):focus {
+  box-shadow: none;
+}

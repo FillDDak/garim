@@ -31,6 +31,8 @@ describe('positives in varied formats', () => {
     ['휴대폰: 010.1234.5678', 'phone:010.1234.5678'],
     ['010 1234 5678로 연락주세요', 'phone:010 1234 5678'],
     ['(02) 123-4567', 'phone:(02) 123-4567'],
+    ['제 번호(02-2345-6789)로 주세요', 'phone:02-2345-6789'],
+    ['팩스 031-123-4567', 'phone:031-123-4567'],
     ['+82-10-9876-5432', 'phone:+82-10-9876-5432'],
     ['주민번호: 9001011234568', 'rrn:9001011234568'],
     ['생년월일: 1990년 3월 5일', 'birth:1990년 3월 5일'],
@@ -45,4 +47,17 @@ describe('positives in varied formats', () => {
     ['서울12가3456 차량', 'car:서울12가3456'],
   ]
   for (const [t, exp] of cases) it(t, () => expect(found(t)).toContain(exp))
+})
+
+describe('demo sample', () => {
+  it('masks every personal value in the built-in sample', async () => {
+    const { SAMPLE_TEXT } = await import('../src/lib/samples')
+    const { applyMask } = await import('../src/core/mask')
+    for (const mode of ['token', 'fake', 'redact'] as const) {
+      const out = applyMask(SAMPLE_TEXT, detect(SAMPLE_TEXT, opts), new Set(), { mode, tokenLang: 'ko', partialRedact: false }).text
+      for (const secret of ['박서준', '정하은', '김민수', '950314', '9876', '2345-6789', 'haeun', '월드컵북로', '456789', '3456', 'abc123def456', 'sk-proj']) {
+        expect(out, `${mode}: ${secret}`).not.toContain(secret)
+      }
+    }
+  })
 })
