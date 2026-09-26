@@ -12,6 +12,11 @@ export const COMPOUND_SURNAMES = ['남궁', '황보', '제갈', '선우', '독�
 
 /** Titles / honorifics that typically follow a person's name. Longest first. */
 export const NAME_TITLES = [
+  '담당자님',
+  '담당자',
+  '드림',
+  '올림',
+  '배상',
   '부사장님',
   '본부장님',
   '선생님께서',

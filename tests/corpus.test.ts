@@ -61,3 +61,19 @@ describe('demo sample', () => {
     }
   })
 })
+
+describe('name patterns', () => {
+  const cases: Array<[string, string]> = [
+    ['안녕하세요, 마케팅팀 김민수입니다.', 'name:김민수'],
+    ['안녕하세요 이서연입니다', 'name:이서연'],
+    ['감사합니다.\n박지훈 드림', 'name:박지훈'],
+    ['홍길동(010-1234-5678)에게 연락', 'name:홍길동'],
+    ['Please contact Mr. John Smith today', 'name:John Smith'],
+    ['정수아 담당자님께 전달했습니다', 'name:정수아'],
+  ]
+  for (const [t, exp] of cases) it(t, () => expect(found(t)).toContain(exp))
+  it('does not flag intro without a name', () => {
+    expect(found('안녕하세요, 고객센터입니다.')).toEqual([])
+    expect(found('안녕하세요 반갑습니다')).toEqual([])
+  })
+})

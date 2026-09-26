@@ -406,6 +406,25 @@ export const detectNamesBasic: Detector = (text) => {
   return out
 }
 
+// "안녕하세요, 김민수입니다" / "저는 김민수이고" (self introduction)
+const NAME_INTRO_RE = new RegExp(`(?:안녕하세요|안녕하십니까|반갑습니다|저는|제 이름은)[\\s,.!~]*(?:[${H}A-Za-z0-9]{1,12}\\s+(?:[${H}]{1,6}\\s+)?)?([${H}]{3})(?:입니다|이에요|예요|이고요?|이며|라고\\s?합니다)`, 'gd')
+// "Mr. John Smith", "Dr. Kim"
+const NAME_EN_TITLE_RE = /\b(?:Mr|Mrs|Ms|Miss|Dr|Prof)\.?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/gd
+
+export const detectNamesExtra: Detector = (text) => {
+  const out: Candidate[] = []
+  for (const m of matches(NAME_INTRO_RE, text)) {
+    const r = groupRange(m, 1)
+    if (!r || !isPlausibleName(m[1])) continue
+    out.push({ type: 'name', start: r[0], end: r[1], confidence: 'medium', source: 'context', note: '자기소개 속 이름' })
+  }
+  for (const m of matches(NAME_EN_TITLE_RE, text)) {
+    const r = groupRange(m, 1)
+    if (r) out.push({ type: 'name', start: r[0], end: r[1], confidence: 'medium', source: 'context', note: '영문 호칭 뒤 이름' })
+  }
+  return out
+}
+
 export const detectNamesStrong: Detector = (text) => {
   const out: Candidate[] = []
   for (const m of matches(NAME_PARTICLE_RE, text)) {
@@ -432,6 +451,7 @@ export const DETECTORS: Array<[EntityType | EntityType[], Detector]> = [
   ['ip', detectIP],
   ['birth', detectBirth],
   ['name', detectNamesBasic],
+  ['name', detectNamesExtra],
 ]
 
 /** Priority when two candidates overlap (higher wins). */
