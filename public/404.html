@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>가림</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script>
+      // GitHub Pages project site: send unknown paths back to the app root (/<repo>/)
+      var seg = location.pathname.split('/')[1]
+      location.replace(location.hostname.endsWith('github.io') && seg ? '/' + seg + '/' : '/')
+    </script>
+  </head>
+  <body style="font-family: sans-serif; padding: 40px">
+    <a href="./">가림으로 이동</a>
+  </body>
+</html>
