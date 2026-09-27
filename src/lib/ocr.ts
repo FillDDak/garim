@@ -15,6 +15,27 @@ export interface OcrProgress {
 let workerPromise: Promise<Worker> | null = null
 let progressListener: ((p: OcrProgress) => void) | null = null
 
+/**
+ * One photo takes several recognition passes (orientation check, differently thresholded copies,
+ * a flattened and the original view). Tesseract reports 0–100% per pass; this folds them into one
+ * overall figure that only moves forward.
+ */
+const run = { active: false, done: 0, total: 1, shown: 0 }
+/** Adds `n` recognition passes to the expected total of the current run. */
+const expectPasses = (n: number) => {
+  run.total += n
+}
+const passDone = () => {
+  run.done++
+}
+function report(status: string, progress: number) {
+  if (!progressListener) return
+  if (run.active && status === 'recognizing text') {
+    run.shown = Math.max(run.shown, Math.min(0.99, (run.done + progress) / Math.max(1, run.total)))
+    progressListener({ status: STATUS_KO[status], progress: run.shown })
+  } else progressListener({ status: STATUS_KO[status] ?? status, progress })
+}
+
 const STATUS_KO: Record<string, string> = {
   'loading tesseract core': 'OCR 엔진 불러오는 중',
   'initializing tesseract': 'OCR 엔진 준비 중',
@@ -37,7 +58,7 @@ export function getOcrWorker(onProgress?: (p: OcrProgress) => void): Promise<Wor
         langPath: assetUrl('ocr/lang'),
         gzip: true,
         cacheMethod: 'write',
-        logger: (m: { status: string; progress: number }) => progressListener?.({ status: STATUS_KO[m.status] ?? m.status, progress: m.progress }),
+        logger: (m: { status: string; progress: number }) => report(m.status, m.progress),
       })
       await worker.setParameters({ preserve_interword_spaces: '1' })
       return worker
@@ -85,6 +106,20 @@ export async function detectInImage(
 ): Promise<{ detections: Detection[]; text: string; entities: Entity[]; orientation: number }> {
   const worker = await getOcrWorker(onProgress)
   progressListener = onProgress ?? null
+  // expected: orientation check + 5 thorough passes + 1 safety-net pass (adjusted as we go)
+  Object.assign(run, { active: true, done: 0, total: 7, shown: 0 })
+  try {
+    return await detectAll(worker, source, opts)
+  } finally {
+    run.active = false
+  }
+}
+
+async function detectAll(
+  worker: Worker,
+  source: HTMLCanvasElement,
+  opts: DetectOptions,
+): Promise<{ detections: Detection[]; text: string; entities: Entity[]; orientation: number }> {
 
   // Photos are rarely flat: undo the perspective of a photographed sheet, then any remaining
   // rotation (Tesseract loses most Korean text beyond ~5° of skew). The whole image is always
@@ -99,6 +134,7 @@ export async function detectInImage(
     views.push(straighten(flat.canvas, (x, y) => base.toSource(...flat.toSource(x, y)), source))
   }
   views.push(straighten(base.canvas, base.toSource, source))
+  if (!quad) expectPasses(-1)
 
   const detections: Detection[] = []
   let text = ''
@@ -109,6 +145,7 @@ export async function detectInImage(
     // with a detected sheet, the whole photo is only a safety net (a lighter, faster pass) unless
     // the sheet view read little: the outline found may not be the document at all
     const thorough = !(quad && i > 0) || quadWeak
+    if (quad && i > 0 && quadWeak) expectPasses(4)
     const r = await recognizeView(worker, view, opts, thorough, hint)
     if (quad && i === 0) quadWeak = r.detections.filter((d) => !(d.type === 'custom' && d.label === '번호')).length < 2
     if (!entities.length && r.entities.length) {
@@ -135,6 +172,7 @@ async function detectOrientation(worker: Worker, source: HTMLCanvasElement): Pro
   await worker.setParameters({ tessedit_pageseg_mode: '11', thresholding_method: '0' } as never)
   const score = async (c: HTMLCanvasElement) => {
     const { data } = await worker.recognize(c, {}, { blocks: true })
+    passDone()
     let n = 0
     for (const b of data.blocks ?? [])
       for (const p of b.paragraphs)
@@ -151,6 +189,7 @@ async function detectOrientation(worker: Worker, source: HTMLCanvasElement): Pro
     if (s0 >= 30) return 0
     let best = 0
     let bestScore = s0
+    expectPasses(3)
     for (const a of [90, 270, 180]) {
       const r = rotateCanvas(small, a)
       const v = await score(r.canvas)
@@ -218,6 +257,8 @@ async function recognizeView(
     const lines = removeRuledLines(input)
     if (lines) passes.push({ id: 'form6', canvas: () => lines, psm: '6', th: '0' })
   }
+  // the plan assumed 5 passes for a thorough view and 1 for a light one
+  expectPasses(passes.length - (thorough ? 5 : 1))
   const detections: Detection[] = []
   let firstText = ''
   let firstEntities: Entity[] = []
@@ -280,6 +321,7 @@ async function recognizeView(
     const canvas = pass.canvas()
     await worker.setParameters({ tessedit_pageseg_mode: pass.psm, thresholding_method: pass.th } as never)
     const { data } = await worker.recognize(canvas, {}, { blocks: true, text: true })
+    passDone()
     collect(data.blocks ?? [], pass.id)
     if (canvas !== input) canvas.width = canvas.height = 0
   }
@@ -289,7 +331,9 @@ async function recognizeView(
     const enhanced = enhanceForOcr(work, Math.min(2400, cap))
     const k = enhanced.width / work.width
     await worker.setParameters({ tessedit_pageseg_mode: '6', thresholding_method: '2' } as never)
+    expectPasses(1)
     const { data } = await worker.recognize(enhanced, {}, { blocks: true, text: true })
+    passDone()
     // express the boxes in the same space as the other passes
     collect(data.blocks ?? [], 'enh', scale / k)
     enhanced.width = enhanced.height = 0
