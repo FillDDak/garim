@@ -101,7 +101,9 @@ function insertText(target: HTMLElement, text: string) {
   target.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
 }
 
-document.addEventListener(
+// Registered on window, capture phase, at document_start: runs before any listener the chat app
+// adds itself (Gemini and others handle paste early and would otherwise insert the raw text)
+window.addEventListener(
   'paste',
   (e) => {
     if (bypassNext) {
@@ -156,6 +158,40 @@ function shouldSkip(node: Text): boolean {
   return false
 }
 
+// Revealed values are marked on screen (CSS Custom Highlight API: no change to the page's DOM
+// structure), so it's clear that what the AI received was the placeholder
+const HL_NAME = 'garim-revealed'
+type HighlightRegistry = { set: (n: string, h: unknown) => void; delete: (n: string) => void }
+const cssHighlights = (globalThis.CSS as unknown as { highlights?: HighlightRegistry } | undefined)?.highlights
+const HighlightCtor = (globalThis as unknown as { Highlight?: new (...r: Range[]) => unknown }).Highlight
+let hlStyle: HTMLStyleElement | null = null
+
+function refreshHighlights() {
+  if (!cssHighlights || !HighlightCtor) return
+  if (!hlStyle) {
+    hlStyle = document.createElement('style')
+    hlStyle.textContent = `::highlight(${HL_NAME}) { background-color: rgba(123, 92, 255, 0.2); text-decoration: underline dotted rgba(123, 92, 255, 0.9); }`
+    ;(document.head ?? document.documentElement).appendChild(hlStyle)
+  }
+  const ranges: Range[] = []
+  const originals = [...new Set(mapping.map((m) => m.original))].filter((o) => o.length >= 2)
+  for (const node of touched) {
+    if (!node.isConnected) continue
+    for (const o of originals) {
+      let i = node.data.indexOf(o)
+      while (i >= 0) {
+        const r = document.createRange()
+        r.setStart(node, i)
+        r.setEnd(node, i + o.length)
+        ranges.push(r)
+        i = node.data.indexOf(o, i + o.length)
+      }
+    }
+  }
+  if (ranges.length) cssHighlights.set(HL_NAME, new HighlightCtor(...ranges))
+  else cssHighlights.delete(HL_NAME)
+}
+
 function revealNode(node: Text) {
   if (shouldSkip(node)) return
   const src = originalText.get(node) ?? node.data
@@ -181,6 +217,7 @@ function unrevealAll() {
     if (o != null && node.isConnected) node.data = o
   }
   touched.clear()
+  refreshHighlights()
 }
 
 function applyReveal() {
@@ -192,6 +229,7 @@ function applyReveal() {
     return
   }
   scan(document.body)
+  refreshHighlights()
   observer = new MutationObserver((muts) => {
     for (const m of muts) {
       if (m.type === 'characterData' && m.target.nodeType === 3) {
@@ -208,6 +246,7 @@ function applyReveal() {
       pending = 0
       observer?.disconnect()
       scan(document.body)
+      refreshHighlights()
       observer?.observe(document.body, { childList: true, subtree: true, characterData: true })
     }, 250)
   })
@@ -234,6 +273,8 @@ document.addEventListener('copy', (e) => {
 async function boot() {
   settings = await getSettings()
   mapping = await getMapping(host)
+  // the script starts at document_start (to catch paste first); the UI needs the page body
+  if (document.readyState === 'loading') await new Promise((r) => document.addEventListener('DOMContentLoaded', r, { once: true }))
   document.documentElement.appendChild(rootEl)
   applyReveal()
   chrome.storage.onChanged.addListener(async (changes, area) => {

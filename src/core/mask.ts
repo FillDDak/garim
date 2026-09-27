@@ -223,6 +223,6 @@ export function mergeMapping(prior: MappingEntry[], next: MappingEntry[]): Mappi
 }
 
 export const AI_NOTICE: Record<'ko' | 'en', string> = {
-  ko: '※ 안내: 이 글의 [이름_1]처럼 대괄호로 표시된 부분은 개인정보를 가린 자리표시자입니다. 답변할 때 이 표기를 바꾸거나 추측하지 말고 그대로 사용해 주세요.\n\n',
-  en: 'Note: bracketed tokens such as [NAME_1] are privacy placeholders. Keep them exactly as written in your answer and do not guess the hidden values.\n\n',
+  ko: '※ 안내: 이 글에서 [이름_번호]처럼 대괄호로 표시된 부분은 개인정보를 가린 자리표시자입니다. 답변할 때 이 표기를 바꾸거나 추측하지 말고 그대로 사용해 주세요.\n\n',
+  en: 'Note: bracketed tokens such as [NAME_n] are privacy placeholders. Keep them exactly as written in your answer and do not guess the hidden values.\n\n',
 }
