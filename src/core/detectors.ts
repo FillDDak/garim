@@ -465,6 +465,26 @@ const ROMAN_SURNAMES =
 const ROMAN_NAME_RE = new RegExp(`(?<![A-Za-z])((?:${ROMAN_SURNAMES})[)|!.,]?[ ]{1,3}[A-Z]{2,}(?:[- ]?[A-Z]{2,})?)(?![A-Za-z])`, 'g')
 const ROMAN_STOP = /\b(CARD|BANK|VALID|THRU|MONTH|YEAR|STUDENT|KOREA|REPUBLIC|SEOUL|CITY|CO|LTD|INC|CORP|UNIVERSITY|COLLEGE|MEMBER|CLASS|GOLD|PLATINUM|DEBIT|CREDIT|CHECK|MASTER|VISA|NAME|DATE|NO|ID|TYPE|SEX|ISSUE|EXPIRY|PASSPORT|NATIONALITY|AUTHORITY|OF)\b/
 
+// Revised (and common older) romanisation of one Korean syllable: onset + vowel + coda
+const RR_SYLLABLE = /(?:KK|TT|PP|SS|JJ|CH|G|K|N|D|T|R|L|M|B|P|S|J|H)?(?:YAE|YEO|WAE|YOU|AE|YA|EO|YE|WA|OE|YO|WO|WE|WI|YU|EU|UI|OO|OU|A|E|O|U|I)(?:NG|K|N|T|L|M|P)?/y
+
+/** Number of syllables when `word` reads as a romanised Korean given name (2–3 syllables), else 0. */
+function romanSyllables(word: string): number {
+  // shortest parse by dynamic programming (a syllable regex alone is greedy and can dead-end)
+  const n = word.length
+  const best = new Array<number>(n + 1).fill(Infinity)
+  best[0] = 0
+  for (let i = 0; i < n; i++) {
+    if (best[i] === Infinity) continue
+    for (let j = i + 1; j <= Math.min(n, i + 6); j++) {
+      RR_SYLLABLE.lastIndex = 0
+      const m = RR_SYLLABLE.exec(word.slice(i, j))
+      if (m && m[0].length === j - i) best[j] = Math.min(best[j], best[i] + 1)
+    }
+  }
+  return best[n] >= 2 && best[n] <= 3 ? best[n] : 0
+}
+
 // ID documents: a line holding only a name ("최현규" under "학생증") is the holder's name
 export const ID_DOC_RE = /학생증|주민등록증|운전면허증|자동차등록증|신분증|사원증|공무원증|외국인등록증|등록증|면허증|여권|건강보험증|복지카드|STUDENT\s?ID|ID\s?CARD|EMPLOYEE|PASSPORT|DRIVER/i
 const ID_NAME_LINE_RE = new RegExp(`(?:^|\\n)[^${H}\\n]{0,4}([${H}]{3,4})[^${H}\\n]{0,4}(?=\\n|$)`, 'gd')
@@ -476,6 +496,22 @@ export const detectNamesExtra: Detector = (text) => {
     out.push({ type: 'name', start: m.index, end: m.index + m[1].length, confidence: 'medium', source: 'context', note: '영문 이름' })
   }
   if (ID_DOC_RE.test(text)) {
+    // "HYEONGYU" alone on a line (OCR lost or garbled the surname in front of it, "HO) HYEONGYU"):
+    // cover the given name together with the damaged surname token before it
+    let lineStart = 0
+    for (const line of text.split('\n')) {
+      const given = [...line.matchAll(/(?<![A-Za-z])[A-Z]{5,12}(?![A-Za-z])/g)].filter((g) => !ROMAN_STOP.test(g[0]) && romanSyllables(g[0]))
+      const g = given[given.length - 1]
+      // the rest of the line must be short noise, not a sentence
+      if (g && line.replace(g[0], '').replace(/\s/g, '').length <= 7) {
+        const before = line.slice(0, g.index).match(/(\S{1,6})\s*$/)
+        const start = lineStart + (before ? g.index! - before[0].length : g.index!)
+        const end = lineStart + g.index! + g[0].length
+        if (!out.some((o) => o.start < end && o.end > start))
+          out.push({ type: 'name', start, end, confidence: 'medium', source: 'context', note: '영문 이름 (신분증)' })
+      }
+      lineStart += line.length + 1
+    }
     for (const m of matches(ID_NAME_LINE_RE, text)) {
       const r = groupRange(m, 1)
       if (!r || !isPlausibleName(m[1])) continue

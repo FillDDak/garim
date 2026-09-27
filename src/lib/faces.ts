@@ -29,7 +29,7 @@ function loadFaceApi(): Promise<FaceApi> {
  * Finds faces (ID photos, selfies, people in screenshots). The box is enlarged to cover hair and
  * chin, which identify a person as much as the face itself.
  */
-export async function detectFaces(canvas: HTMLCanvasElement): Promise<Detection[]> {
+export async function detectFaces(canvas: HTMLCanvasElement, rotate = 0): Promise<Detection[]> {
   try {
     const faceapi = await loadFaceApi()
     const find = async (c: HTMLCanvasElement, minConfidence: number) =>
@@ -40,22 +40,17 @@ export async function detectFaces(canvas: HTMLCanvasElement): Promise<Detection[
         const padBottom = b.height * 0.4
         return { score: r.score, x0: b.x - padX, y0: b.y - padTop, x1: b.x + b.width + padX, y1: b.y + b.height + padBottom }
       })
-    let found = await find(canvas, 0.35)
+    // the detector only finds upright faces: a sideways / upside-down photo (orientation found by
+    // OCR) is turned upright first
+    let found: Awaited<ReturnType<typeof find>>
     let toSource: ((x: number, y: number) => [number, number]) | null = null
-    // the detector only finds upright faces: try a sideways / upside-down photo turned upright
-    // (stricter threshold, so documents without a photo don't pick up false faces)
-    if (!found.length) {
+    if (rotate) {
       const { rotateCanvas } = await import('./deskew')
-      for (const a of [90, 270, 180]) {
-        const r = rotateCanvas(canvas, a)
-        found = await find(r.canvas, 0.6)
-        r.canvas.width = r.canvas.height = 0
-        if (found.length) {
-          toSource = r.toSource
-          break
-        }
-      }
-    }
+      const r = rotateCanvas(canvas, rotate)
+      found = await find(r.canvas, 0.35)
+      r.canvas.width = r.canvas.height = 0
+      toSource = r.toSource
+    } else found = await find(canvas, 0.35)
     return found.map((f, i) => {
       let { x0, y0, x1, y1 } = f
       if (toSource) {

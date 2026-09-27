@@ -97,11 +97,14 @@ export function ImageView() {
     async (item: ImageItem) => {
       update(item.id, (it) => ({ ...it, status: 'scanning' }))
       try {
-        const [ocr, codes, faces] = await Promise.all([
+        const { detectFaces } = await import('../lib/faces')
+        const [ocr, codes, upright] = await Promise.all([
           detectInImage(item.source, settings.detect, (p) => setProgress(p)),
           detectCodes(item.source),
-          import('../lib/faces').then((m) => m.detectFaces(item.source)),
+          detectFaces(item.source),
         ])
+        // a sideways photo: look for faces again with the image turned upright
+        const faces = upright.length || !ocr.orientation ? upright : await detectFaces(item.source, ocr.orientation)
         const boxes = [...faces, ...ocr.detections, ...codes]
         update(item.id, (it) => ({
           ...it,

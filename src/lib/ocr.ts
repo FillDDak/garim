@@ -82,7 +82,7 @@ export async function detectInImage(
   source: HTMLCanvasElement,
   opts: DetectOptions,
   onProgress?: (p: OcrProgress) => void,
-): Promise<{ detections: Detection[]; text: string; entities: Entity[] }> {
+): Promise<{ detections: Detection[]; text: string; entities: Entity[]; orientation: number }> {
   const worker = await getOcrWorker(onProgress)
   progressListener = onProgress ?? null
 
@@ -117,7 +117,7 @@ export async function detectInImage(
     for (const d of r.detections) addDetection(detections, d)
     if (view.work !== source) view.work.width = view.work.height = 0
   }
-  return { detections, text, entities }
+  return { detections, text, entities, orientation: angle }
 }
 
 /**

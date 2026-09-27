@@ -127,3 +127,15 @@ describe('vehicle registration OCR quirks', () => {
     expect(r.filter((x) => x === 'name:소유자')).toEqual([])
   })
 })
+
+describe('romanised names on ID cards with a damaged surname', () => {
+  const names = (t: string) => detect(t, opts).filter((e) => e.type === 'name').map((e) => e.value)
+  it('covers the given name and the garbled surname before it', () => {
+    expect(names('학생증 Student ID Card\nHANA\nHO) HYEONGYU\n')).toContain('HO) HYEONGYU')
+    expect(names('학생증\n€©HOY MINJUNG |\n')).toContain('€©HOY MINJUNG')
+  })
+  it('ignores card words and text outside ID documents', () => {
+    expect(names('학생증\nHANA CARD\nVALID THRU 03/29\n')).toEqual([])
+    expect(names('회의록\nHO) HYEONGYU\n')).toEqual([])
+  })
+})
