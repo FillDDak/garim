@@ -1774,9 +1774,12 @@ input[type='checkbox'] {
   flex-direction: column;
   align-items: center;
   gap: 14px;
+  margin-top: 48px;
 }
 .demo h2 {
-  margin: 0;
+  margin: 0 0 4px;
+  font-size: 24px;
+  letter-spacing: -0.03em;
 }
 .demo .segmented {
   max-width: 100%;
