@@ -8,6 +8,7 @@ import { RestoreView } from './views/RestoreView'
 import { SettingsView } from './views/SettingsView'
 import { GuideView } from './views/GuideView'
 import { FEEDBACK_EMAIL, FEEDBACK_MAILTO } from './lib/feedback'
+import { markSharedImages } from './lib/shareInbox'
 
 const FileView = lazy(() => import('./views/FileView').then((m) => ({ default: m.FileView })))
 const ImageView = lazy(() => import('./views/ImageView').then((m) => ({ default: m.ImageView })))
@@ -64,9 +65,15 @@ function Shell() {
     }
   }, [])
 
-  // Web Share Target (installed PWA on Android): ?text=...&title=...&url=...
+  // Web Share Target (installed PWA on Android): photos (?share=images) or ?text=...&title=...&url=...
   useEffect(() => {
     const p = new URLSearchParams(window.location.search)
+    if (p.get('share') === 'images') {
+      markSharedImages()
+      window.history.replaceState(null, '', window.location.pathname + '#/image')
+      setRoute('image')
+      return
+    }
     const shared = [p.get('title'), p.get('text'), p.get('url')].filter(Boolean).join('\n')
     if (shared) {
       setPendingText(shared)

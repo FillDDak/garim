@@ -162,6 +162,15 @@ export function ImageView() {
     [scan, toast],
   )
 
+  // photos shared to the installed app from the Android share menu
+  useEffect(() => {
+    void import('../lib/shareInbox').then(async ({ takeSharedImages }) => {
+      const files = await takeSharedImages()
+      if (files.length) void addFiles(files)
+    })
+    // the inbox empties itself on the first read, so re-running this is harmless
+  }, [addFiles])
+
   // paste from clipboard anywhere on this view
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
