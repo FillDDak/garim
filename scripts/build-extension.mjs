@@ -10,7 +10,7 @@ const out = join(root, 'extension', 'dist')
 rmSync(out, { recursive: true, force: true })
 mkdirSync(out, { recursive: true })
 
-for (const entry of ['content', 'popup']) {
+for (const entry of ['content', 'popup', 'background']) {
   await build({
     configFile: false,
     publicDir: false,

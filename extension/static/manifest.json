@@ -4,9 +4,40 @@
   "short_name": "가림",
   "version": "1.0.0",
   "description": "ChatGPT·Claude·Gemini 입력창에 붙여넣는 순간 개인정보를 자동으로 가리고, AI 답변에서는 원래 값으로 보여 줍니다. 모든 처리는 브라우저 안에서만.",
-  "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
-  "action": { "default_popup": "popup.html", "default_icon": { "16": "icons/16.png", "32": "icons/32.png" } },
-  "permissions": ["storage", "activeTab"],
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png"
+    }
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://claude.ai/*",
+    "https://gemini.google.com/*",
+    "https://www.perplexity.ai/*",
+    "https://copilot.microsoft.com/*",
+    "https://chat.deepseek.com/*",
+    "https://grok.com/*",
+    "https://wrtn.ai/*",
+    "https://clova-x.naver.com/*",
+    "https://chat.mistral.ai/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": [
@@ -22,7 +53,9 @@
         "https://clova-x.naver.com/*",
         "https://chat.mistral.ai/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_start"
     }
   ]

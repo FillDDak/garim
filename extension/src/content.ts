@@ -9,6 +9,17 @@ import type { MappingEntry } from '../../src/core/types'
 import { getMapping, getSettings, setMapping, setSettings, type ExtSettings } from './store'
 
 const host = location.host
+/**
+ * After the extension is updated, the previous copy of this script stays in open tabs but
+ * can no longer reach the extension. It must then step aside for the freshly injected copy.
+ */
+const alive = () => {
+  try {
+    return Boolean(chrome.runtime?.id)
+  } catch {
+    return false
+  }
+}
 let settings: ExtSettings
 let mapping: MappingEntry[] = []
 let bypassNext = false
@@ -84,6 +95,46 @@ function editableFrom(t: EventTarget | null): HTMLElement | null {
   return e as HTMLElement | null
 }
 
+/**
+ * The app already inserted `pasted` at the caret: select exactly that text and replace it with
+ * `masked`. Returns false (changing nothing) when the inserted text can't be found reliably.
+ */
+async function fixUpAfterApp(target: HTMLElement, pasted: string, masked: string): Promise<boolean> {
+  const norm = (x: string) => x.replace(/\s+/g, '')
+  const want = norm(pasted)
+  const attempt = (): boolean => {
+    if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
+      const end = target.selectionEnd ?? target.value.length
+      const start = end - pasted.length
+      if (start < 0 || target.value.slice(start, end) !== pasted) return false
+      target.setSelectionRange(start, end)
+      insertText(target, masked)
+      return true
+    }
+    const sel = document.getSelection()
+    if (!sel || !sel.rangeCount || !target.contains(sel.focusNode)) return false
+    sel.collapseToEnd()
+    // grow the selection backwards from the caret until it spans the pasted text
+    for (let i = 0; i < pasted.length + 50; i++) {
+      sel.modify('extend', 'backward', 'character')
+      const got = norm(sel.toString())
+      if (got === want) {
+        insertText(target, masked)
+        return true
+      }
+      if (got.length > want.length || !want.endsWith(got)) break
+    }
+    sel.collapseToEnd()
+    return false
+  }
+  // the app may insert synchronously or a moment later
+  for (const wait of [0, 60, 200]) {
+    await new Promise((r) => setTimeout(r, wait))
+    if (attempt()) return true
+  }
+  return false
+}
+
 function insertText(target: HTMLElement, text: string) {
   target.focus()
   // execCommand keeps the host app's undo stack and framework state (React/ProseMirror) in sync
@@ -110,8 +161,13 @@ window.addEventListener(
       bypassNext = false
       return
     }
-    if (!settings?.enabled) return
-    const target = editableFrom(e.target)
+    if (!alive() || !settings?.enabled) return
+    // the event path is fixed at dispatch time: it still leads to the editor even when the app
+    // has already replaced the node the paste landed on
+    const target =
+      editableFrom(e.target) ??
+      e.composedPath().reduce<HTMLElement | null>((found, n) => found ?? (n instanceof HTMLElement ? editableFrom(n) : null), null) ??
+      editableFrom(document.activeElement)
     if (!target || rootEl.contains(target)) return
     const text = e.clipboardData?.getData('text/plain')
     if (!text || text.length < 4) return
@@ -120,9 +176,24 @@ window.addEventListener(
 
     const r = applyMask(text, entities, new Set(), { mode: settings.mode, tokenLang: 'ko', partialRedact: true }, mapping)
     const isFirst = mapping.length === 0
+    const notice = settings.mode === 'token' && settings.notice && isFirst ? AI_NOTICE.ko : ''
+    if (e.defaultPrevented) {
+      // The chat app handled this paste before us (this copy of the script was added to an
+      // already-open tab, after the app's own listeners): swap the text it just inserted
+      void fixUpAfterApp(target, text, notice + r.text).then((ok) => {
+        if (ok) {
+          mapping = mergeMapping(mapping, r.mapping)
+          void setMapping(host, mapping)
+          updatePill()
+          toast(`<b>가림</b> 개인정보 ${entities.length}곳을 가렸어요`)
+        } else {
+          toast('<b>가림</b> 이 탭에서는 붙여넣은 글을 가리지 못했어요. 새로고침하면 동작해요', [{ label: '새로고침', run: () => location.reload() }], 15000)
+        }
+      })
+      return
+    }
     e.preventDefault()
     e.stopImmediatePropagation()
-    const notice = settings.mode === 'token' && settings.notice && isFirst ? AI_NOTICE.ko : ''
     insertText(target, notice + r.text)
     mapping = mergeMapping(mapping, r.mapping)
     void setMapping(host, mapping)
@@ -231,6 +302,10 @@ function applyReveal() {
   scan(document.body)
   refreshHighlights()
   observer = new MutationObserver((muts) => {
+    if (!alive()) {
+      observer?.disconnect()
+      return
+    }
     for (const m of muts) {
       if (m.type === 'characterData' && m.target.nodeType === 3) {
         const t = m.target as Text
@@ -256,7 +331,7 @@ function applyReveal() {
 // When the user copies an AI answer while reveal is on, the copy already carries originals.
 // When reveal is off, restore placeholders in copied text so pasting elsewhere is useful.
 document.addEventListener('copy', (e) => {
-  if (!settings?.enabled || !mapping.length || settings.reveal) return
+  if (!alive() || !settings?.enabled || !mapping.length || settings.reveal) return
   const sel = document.getSelection()?.toString()
   if (!sel) return
   const target = editableFrom(e.target)
@@ -280,6 +355,8 @@ async function boot() {
   mapping = await getMapping(host)
   // the script starts at document_start (to catch paste first); the UI needs the page body
   if (document.readyState === 'loading') await new Promise((r) => document.addEventListener('DOMContentLoaded', r, { once: true }))
+  // a copy left behind by a previous version of the extension: replace its UI
+  document.querySelectorAll('garim-root').forEach((el) => el.remove())
   document.documentElement.appendChild(rootEl)
   applyReveal()
   chrome.storage.onChanged.addListener(async (changes, area) => {

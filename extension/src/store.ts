@@ -13,13 +13,18 @@ declare global {
     }
     tabs?: {
       create: (o: { url: string }) => void
-      query: (q: { active: boolean; currentWindow: boolean }) => Promise<Array<{ id?: number; url?: string }>>
+      query: (q: { active?: boolean; currentWindow?: boolean; url?: string[] }) => Promise<Array<{ id?: number; url?: string }>>
       sendMessage: (id: number, msg: unknown) => Promise<unknown>
       reload: (id: number) => Promise<void>
     }
     runtime: {
       onMessage: { addListener: (cb: (msg: unknown, sender: unknown, reply: (r: unknown) => void) => void) => void }
-      getManifest: () => { content_scripts?: Array<{ matches?: string[] }> }
+      getManifest: () => { content_scripts?: Array<{ matches?: string[]; js?: string[] }> }
+      onInstalled: { addListener: (cb: (details: { reason: string }) => void) => void }
+      id?: string
+    }
+    scripting?: {
+      executeScript: (o: { target: { tabId: number; allFrames?: boolean }; files: string[] }) => Promise<unknown>
     }
   }
 }
