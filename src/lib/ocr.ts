@@ -2,6 +2,7 @@ import type { Worker } from 'tesseract.js'
 import { detect } from '../core/engine'
 import type { DetectOptions, Entity, EntityType } from '../core/types'
 import { assetUrl } from './assetUrl'
+import { enhanceForOcr, estimateSkew, rotateCanvas } from './deskew'
 
 
 export interface OcrProgress {
@@ -51,6 +52,8 @@ export interface OcrBox {
   y: number
   w: number
   h: number
+  /** Rotation (radians, clockwise) around the box centre, for text in tilted photos. */
+  angle?: number
 }
 
 export interface Detection {
@@ -79,16 +82,27 @@ export async function detectInImage(
   const worker = await getOcrWorker(onProgress)
   progressListener = onProgress ?? null
 
+  // Photos are rarely straight: Tesseract loses most Korean text beyond ~5° of skew,
+  // so estimate the angle and recognise on a straightened copy.
+  const skew = estimateSkew(source)
+  let work: HTMLCanvasElement = source
+  let toSource = (x: number, y: number): [number, number] => [x, y]
+  if (Math.abs(skew) >= 1) {
+    const r = rotateCanvas(source, skew)
+    work = r.canvas
+    toSource = r.toSource
+  }
+
   // upscale small screenshots: Tesseract works best with ~30px glyphs
-  const scale = source.width < 1400 ? Math.min(2.5, 2000 / Math.max(1, source.width)) : 1
-  let input: HTMLCanvasElement = source
+  const scale = work.width < 1400 ? Math.min(2.5, 2000 / Math.max(1, work.width)) : 1
+  let input: HTMLCanvasElement = work
   if (scale > 1.05) {
     input = document.createElement('canvas')
-    input.width = Math.round(source.width * scale)
-    input.height = Math.round(source.height * scale)
+    input.width = Math.round(work.width * scale)
+    input.height = Math.round(work.height * scale)
     const ctx = input.getContext('2d')!
     ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(source, 0, 0, input.width, input.height)
+    ctx.drawImage(work, 0, 0, input.width, input.height)
   }
 
   // Two complementary passes: a uniform-block pass keeps sentences in reading order, a sparse pass
@@ -116,17 +130,40 @@ export async function detectInImage(
     }
   }
 
-  // back to source coordinates + padding
+  // Blurry / low-contrast photos: retry once on a contrast-stretched, sharpened, larger copy
+  if (detections.length < 3) {
+    const enhanced = enhanceForOcr(work)
+    const k = enhanced.width / work.width
+    await worker.setParameters({ tessedit_pageseg_mode: '6', thresholding_method: '2' } as never)
+    const { data } = await worker.recognize(enhanced, {}, { blocks: true, text: true })
+    for (const gapRatio of [0.28, 0.6]) {
+      const { text, glyphs } = linearize(data.blocks ?? [], gapRatio)
+      const entities = detect(text, opts)
+      if (!firstEntities.length && entities.length) {
+        firstText = text
+        firstEntities = entities
+      }
+      for (const d of boxesFor(entities, glyphs)) {
+        // express the box in the same (upscaled) space as the other passes
+        const f = scale / k
+        const box = { x: d.box.x * f, y: d.box.y * f, w: d.box.w * f, h: d.box.h * f }
+        if (!detections.some((x) => x.type === d.type && overlap(x.box, box) > 0.35)) detections.push({ ...d, box, id: `enh${gapRatio}:${d.id}` })
+      }
+    }
+    enhanced.width = enhanced.height = 0
+  }
+
+  // back to source coordinates + padding (rotated boxes keep the text angle)
+  const angle = work === source ? 0 : (skew * Math.PI) / 180
   for (const d of detections) {
     const pad = Math.max(2, d.box.h * 0.18)
-    d.box = {
-      x: Math.max(0, (d.box.x - pad) / scale),
-      y: Math.max(0, (d.box.y - pad) / scale),
-      w: (d.box.w + pad * 2) / scale,
-      h: (d.box.h + pad * 2) / scale,
-    }
+    const w = (d.box.w + pad * 2) / scale
+    const h = (d.box.h + pad * 2) / scale
+    const [cx, cy] = toSource((d.box.x + d.box.w / 2) / scale, (d.box.y + d.box.h / 2) / scale)
+    d.box = angle ? { x: cx - w / 2, y: cy - h / 2, w, h, angle } : { x: Math.max(0, cx - w / 2), y: Math.max(0, cy - h / 2), w, h }
   }
   if (input !== source) input.width = input.height = 0
+  if (work !== source && work !== input) work.width = work.height = 0
   return { detections, text: firstText, entities: firstEntities }
 }
 

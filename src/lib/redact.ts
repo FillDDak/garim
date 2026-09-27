@@ -5,6 +5,20 @@ export interface Rect {
   y: number
   w: number
   h: number
+  /** Optional rotation (radians, clockwise) around the rectangle centre. */
+  angle?: number
+}
+
+/** Axis-aligned bounds of a (possibly rotated) rectangle. */
+export function boundsOf(r: Rect): Rect {
+  if (!r.angle) return r
+  const cx = r.x + r.w / 2
+  const cy = r.y + r.h / 2
+  const c = Math.abs(Math.cos(r.angle))
+  const s = Math.abs(Math.sin(r.angle))
+  const w = r.w * c + r.h * s
+  const h = r.w * s + r.h * c
+  return { x: cx - w / 2, y: cy - h / 2, w, h }
 }
 
 const clampRect = (r: Rect, W: number, H: number): Rect | null => {
@@ -18,6 +32,21 @@ const clampRect = (r: Rect, W: number, H: number): Rect | null => {
 
 /** Paint one redaction onto `ctx` (whose current pixels are the source image). */
 export function paintRedaction(ctx: CanvasRenderingContext2D, rect: Rect, style: RedactStyle) {
+  if (rect.angle) {
+    // clip to the rotated rectangle, then redact its bounding box
+    const cx = rect.x + rect.w / 2
+    const cy = rect.y + rect.h / 2
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.rotate(rect.angle)
+    ctx.beginPath()
+    ctx.rect(-rect.w / 2, -rect.h / 2, rect.w, rect.h)
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clip()
+    paintRedaction(ctx, boundsOf(rect), style)
+    ctx.restore()
+    return
+  }
   const { width: W, height: H } = ctx.canvas
   const r = clampRect(rect, W, H)
   if (!r) return

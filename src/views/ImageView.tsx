@@ -289,8 +289,9 @@ export function ImageView() {
             <strong>캡처·사진을 끌어다 놓거나, Ctrl+V로 붙여넣으세요</strong>
             <span>카톡 대화, 주문내역, 신분증, 계약서 사진 속 이름·전화번호·주소·계좌번호를 글자 인식(OCR)으로 찾아 가립니다.</span>
             <span className="dz-meta">
-              PNG · JPG · WEBP · 여러 장 가능 · 한국어/영어 인식 · 처음 한 번 인식 모델(약 5MB)을 내려받은 뒤에는 오프라인에서도 동작
+              PNG · JPG · WEBP · 여러 장 가능 · 기울어진 사진은 자동으로 바로 세워 인식 · 처음 한 번 인식 모델(약 5MB)을 받은 뒤에는 오프라인에서도 동작
             </span>
+            <span className="dz-meta">사진은 문서를 정면에서, 화면에 꽉 차게 찍을수록 정확해요</span>
             <span className="btn btn-primary btn-md">이미지 선택</span>
           </button>
           <div className="drop-extra">
@@ -349,7 +350,7 @@ export function ImageView() {
                       <div
                         key={b.id}
                         className={`img-box g-${groupOf(b)} ${off ? 'off' : ''} ${hover === b.id ? 'hover' : ''}`}
-                        style={{ left: `${(b.box.x / W) * 100}%`, top: `${(b.box.y / H) * 100}%`, width: `${(b.box.w / W) * 100}%`, height: `${(b.box.h / H) * 100}%` }}
+                        style={{ left: `${(b.box.x / W) * 100}%`, top: `${(b.box.y / H) * 100}%`, width: `${(b.box.w / W) * 100}%`, height: `${(b.box.h / H) * 100}%`, transform: b.box.angle ? `rotate(${b.box.angle}rad)` : undefined }}
                         onClick={() => toggleBox(b.id)}
                         onMouseEnter={() => setHover(b.id)}
                         onMouseLeave={() => setHover(null)}
