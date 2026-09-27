@@ -58,6 +58,8 @@ export interface DetectOptions {
   customTerms: CustomTerm[]
   /** Values that should never be masked. */
   allowList: string[]
+  /** The text is known to come from an ID document (e.g. another OCR view of the same photo). */
+  idDocument?: boolean
 }
 
 export interface MaskOptions {

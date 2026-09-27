@@ -1,5 +1,5 @@
 import { escapeRe } from './util'
-import type { Confidence, EntitySource, EntityType } from './types'
+import type { Confidence, DetectOptions, EntitySource, EntityType } from './types'
 import {
   bizNoChecksum,
   corpNoChecksum,
@@ -21,7 +21,7 @@ export interface Candidate {
   label?: string
 }
 
-type Detector = (text: string) => Candidate[]
+type Detector = (text: string, opts?: DetectOptions) => Candidate[]
 
 const H = '가-힣'
 
@@ -468,6 +468,9 @@ const ROMAN_STOP = /\b(CARD|BANK|VALID|THRU|MONTH|YEAR|STUDENT|KOREA|REPUBLIC|SE
 // Revised (and common older) romanisation of one Korean syllable: onset + vowel + coda
 const RR_SYLLABLE = /(?:KK|TT|PP|SS|JJ|CH|G|K|N|D|T|R|L|M|B|P|S|J|H)?(?:YAE|YEO|WAE|YOU|AE|YA|EO|YE|WA|OE|YO|WO|WE|WI|YU|EU|UI|OO|OU|A|E|O|U|I)(?:NG|K|N|T|L|M|P)?/y
 
+// card issuers and companies printed in romanised Korean (also when OCR glues a letter on: "AHANA")
+const ROMAN_BRAND = /HANA|SHINHAN|KOOKMIN|WOORI|NONGHYUP|SAMSUNG|HYUNDAI|LOTTE|KAKAO|SUHYUP|DAEGU|BUSAN|GWANGJU|JEONBUK|GYEONGNAM|SEOUL|INCHEON|KOREA|HANKOOK|DONGA/
+
 /** Number of syllables when `word` reads as a romanised Korean given name (2–3 syllables), else 0. */
 function romanSyllables(word: string): number {
   // shortest parse by dynamic programming (a syllable regex alone is greedy and can dead-end)
@@ -489,18 +492,18 @@ function romanSyllables(word: string): number {
 export const ID_DOC_RE = /학생증|주민등록증|운전면허증|자동차등록증|신분증|사원증|공무원증|외국인등록증|등록증|면허증|여권|건강보험증|복지카드|STUDENT\s?ID|ID\s?CARD|EMPLOYEE|PASSPORT|DRIVER/i
 const ID_NAME_LINE_RE = new RegExp(`(?:^|\\n)[^${H}\\n]{0,4}([${H}]{3,4})[^${H}\\n]{0,4}(?=\\n|$)`, 'gd')
 
-export const detectNamesExtra: Detector = (text) => {
+export const detectNamesExtra: Detector = (text, opts) => {
   const out: Candidate[] = []
   for (const m of matches(ROMAN_NAME_RE, text)) {
     if (ROMAN_STOP.test(m[1].replace(/^[A-Z]+[)|!.,]?\s+/, ''))) continue
     out.push({ type: 'name', start: m.index, end: m.index + m[1].length, confidence: 'medium', source: 'context', note: '영문 이름' })
   }
-  if (ID_DOC_RE.test(text)) {
+  if (opts?.idDocument || ID_DOC_RE.test(text)) {
     // "HYEONGYU" alone on a line (OCR lost or garbled the surname in front of it, "HO) HYEONGYU"):
     // cover the given name together with the damaged surname token before it
     let lineStart = 0
     for (const line of text.split('\n')) {
-      const given = [...line.matchAll(/(?<![A-Za-z])[A-Z]{5,12}(?![A-Za-z])/g)].filter((g) => !ROMAN_STOP.test(g[0]) && romanSyllables(g[0]))
+      const given = [...line.matchAll(/(?<![A-Za-z])[A-Z]{5,12}(?![A-Za-z])/g)].filter((g) => !ROMAN_STOP.test(g[0]) && !ROMAN_BRAND.test(g[0]) && romanSyllables(g[0]))
       const g = given[given.length - 1]
       // the rest of the line must be short noise, not a sentence
       if (g && line.replace(g[0], '').replace(/\s/g, '').length <= 7) {

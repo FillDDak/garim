@@ -152,7 +152,7 @@ export function detect(text: string, opts: DetectOptions): Entity[] {
   for (const [types, fn] of DETECTORS) {
     const list = Array.isArray(types) ? types : [types]
     if (!list.some((t) => opts.enabled[t])) continue
-    for (const c of fn(text)) if (opts.enabled[c.type]) cands.push(c)
+    for (const c of fn(text, opts)) if (opts.enabled[c.type]) cands.push(c)
   }
   if (opts.enabled.name) {
     cands.push(...adjacentNames(text, cands))

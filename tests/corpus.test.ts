@@ -136,6 +136,7 @@ describe('romanised names on ID cards with a damaged surname', () => {
   })
   it('ignores card words and text outside ID documents', () => {
     expect(names('학생증\nHANA CARD\nVALID THRU 03/29\n')).toEqual([])
+    expect(names('학생증\nAHANA\nSHINHAN\n')).toEqual([])
     expect(names('회의록\nHO) HYEONGYU\n')).toEqual([])
   })
 })

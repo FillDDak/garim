@@ -104,11 +104,12 @@ export async function detectInImage(
   let text = ''
   let entities: Entity[] = []
   let quadWeak = false
+  const hint = { idDoc: false }
   for (const [i, view] of views.entries()) {
     // with a detected sheet, the whole photo is only a safety net (a lighter, faster pass) unless
     // the sheet view read little: the outline found may not be the document at all
     const thorough = !(quad && i > 0) || quadWeak
-    const r = await recognizeView(worker, view, opts, thorough)
+    const r = await recognizeView(worker, view, opts, thorough, hint)
     if (quad && i === 0) quadWeak = r.detections.filter((d) => !(d.type === 'custom' && d.label === '번호')).length < 2
     if (!entities.length && r.entities.length) {
       text = r.text
@@ -188,6 +189,8 @@ async function recognizeView(
   view: View,
   opts: DetectOptions,
   thorough: boolean,
+  /** Shared between the views of one photo: whether any of them read an ID-document title. */
+  hint: { idDoc: boolean },
 ): Promise<{ detections: Detection[]; text: string; entities: Entity[] }> {
   const { work, toSource, transformed } = view
   // Tesseract works best with ~30px glyphs: upscale small screenshots, cap huge photos
@@ -218,19 +221,19 @@ async function recognizeView(
   const detections: Detection[] = []
   let firstText = ''
   let firstEntities: Entity[] = []
-  let idDoc = false
+  let idDoc = hint.idDoc
   const collect = (blocks: TBlock[], passId: string, f = 1) => {
     // Word spacing from OCR is unreliable for Korean, so detect on a tight and a loose spacing
     for (const gapRatio of [0.28, 0.6]) {
       const lin = linearize(blocks, gapRatio)
       const text = normalizeOcrText(lin.text)
       debugLog(text)
-      const entities = [...detect(text, opts), ...numberRuns(text)]
+      if (ID_DOC_RE.test(text)) idDoc = hint.idDoc = true
+      const entities = [...detect(text, idDoc ? { ...opts, idDocument: true } : opts), ...numberRuns(text)]
       if (!firstEntities.length && entities.length) {
         firstText = text
         firstEntities = entities
       } else if (!firstText) firstText = text
-      if (ID_DOC_RE.test(text)) idDoc = true
       const found = boxesFor(entities, lin.glyphs)
       // long numbers: grow the box over neighbouring large glyphs on the same line (OCR often
       // garbles part of an embossed card number), and on ID documents cover the holder's name
@@ -246,9 +249,11 @@ async function recognizeView(
               w: Math.max(...own.map((b) => b.x1)) - Math.min(...own.map((b) => b.x0)),
               h: Math.max(...own.map((b) => b.y1)) - Math.min(...own.map((b) => b.y0)),
             }
-            // plus one letter on the left: a first letter split off by OCR is often lost entirely
+            // plus one letter on the left: a first letter split off by OCR is often lost entirely;
+            // a given name read alone ("HYEONGYU") lost its whole surname, so cover a surname's width
             const lh = median(own.map((b) => b.y1 - b.y0))
-            found.push({ id: `${e.id}:line`, type: 'name', text: e.value, box: { x: g.x - lh * 0.9, y: g.y, w: g.w + lh * 0.9, h: g.h } })
+            const lead = lh * (/\s/.test(e.value.trim()) ? 0.9 : 3.4)
+            found.push({ id: `${e.id}:line`, type: 'name', text: e.value, box: { x: g.x - lead, y: g.y, w: g.w + lead, h: g.h } })
           }
         }
         if (!e.id.startsWith('num:')) continue
@@ -739,6 +744,12 @@ function addDetection(list: Detection[], d: Detection) {
         list[i] = withType({ ...d }, x)
         return
       }
+      // the same text seen from two views, one reaching further: one box over both
+      const u = x.type !== 'face' && d.type !== 'face' ? unionQuad(x.box, d.box) : null
+      if (u) {
+        list[i] = withType({ ...x, box: u }, x)
+        return
+      }
       continue
     }
     const keep = area(d.box) > area(x.box) * 1.15 ? { ...d } : { ...x }
@@ -769,8 +780,47 @@ const cornersOf = (b: OcrBox): Array<[number, number]> =>
 export function covers(outer: OcrBox, inner: OcrBox): boolean {
   const poly = cornersOf(outer)
   const side = Math.min(...poly.map((p, i) => Math.hypot(p[0] - poly[(i + 1) % 4][0], p[1] - poly[(i + 1) % 4][1])))
-  const tol = side * 0.3
+  const tol = side * 0.12
   return cornersOf(inner).every((p) => pointInPoly(p, poly) || poly.some((a, i) => segDist(p, a, poly[(i + 1) % 4]) <= tol))
+}
+
+/**
+ * Smallest box in `a`'s own (possibly rotated/sheared) frame that contains both boxes, when the
+ * two are nearly parallel; null otherwise.
+ */
+export function unionQuad(a: OcrBox, b: OcrBox): OcrBox | null {
+  const A = cornersOf(a)
+  const B = cornersOf(b)
+  const o = A[0]
+  const u: [number, number] = [A[1][0] - o[0], A[1][1] - o[1]]
+  const v: [number, number] = [A[3][0] - o[0], A[3][1] - o[1]]
+  const bu: [number, number] = [B[1][0] - B[0][0], B[1][1] - B[0][1]]
+  const cross = (p: [number, number], q: [number, number]) => p[0] * q[1] - p[1] * q[0]
+  const len = (p: [number, number]) => Math.hypot(p[0], p[1])
+  if (Math.abs(cross(u, bu)) / Math.max(1e-9, len(u) * len(bu)) > Math.sin((5 * Math.PI) / 180)) return null
+  const det = cross(u, v)
+  if (Math.abs(det) < 1e-9) return null
+  // coordinates of every corner in the (u, v) frame
+  let s0 = Infinity
+  let s1 = -Infinity
+  let t0 = Infinity
+  let t1 = -Infinity
+  for (const [px, py] of [...A, ...B]) {
+    const d: [number, number] = [px - o[0], py - o[1]]
+    const s = cross(d, v) / det
+    const t = cross(u, d) / det
+    s0 = Math.min(s0, s)
+    s1 = Math.max(s1, s)
+    t0 = Math.min(t0, t)
+    t1 = Math.max(t1, t)
+  }
+  const at = (s: number, t: number): [number, number] => [o[0] + s * u[0] + t * v[0], o[1] + s * u[1] + t * v[1]]
+  const quad = [at(s0, t0), at(s1, t0), at(s1, t1), at(s0, t1)]
+  const xs = quad.map((p) => p[0])
+  const ys = quad.map((p) => p[1])
+  const x = Math.min(...xs)
+  const y = Math.min(...ys)
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y, quad }
 }
 
 function pointInPoly([x, y]: [number, number], poly: Array<[number, number]>): boolean {
