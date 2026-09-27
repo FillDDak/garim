@@ -240,6 +240,8 @@ export function isPlausibleName(word: string, minLen = 3): boolean {
   if (NAME_STOPWORDS.has(word) || LABEL_WORDS.has(word)) return false
   // organisations and places ("리은행" from an OCR-split "우리은행", "한국병원"…)
   if (/(은행|증권|카드|보험|병원|학교|회사|센터|마트|공사|청|구청|시청)$/.test(word)) return false
+  // documents and forms ("계약서", "신청서", "영수증", "위임장"…)
+  if (/^(계약|신청|견적|보고|확인|청구|증명|계산|명세|기안|발주|요청|제안|지원|이력|동의|협약|합의|위임|주문|영수|안내|설명|통지|진단|처방|소견|각|공문|정산|납품|거래|출장|결재|사직|휴가|품의)(서|증|장|문|표)$/.test(word)) return false
   if (word.length === 4) return COMPOUND_SURNAMES.some((s) => word.startsWith(s))
   return startsWithSurname(word)
 }

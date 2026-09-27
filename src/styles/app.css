@@ -1769,6 +1769,36 @@ input[type='checkbox'] {
   margin-top: 26px;
   flex-wrap: wrap;
 }
+.demo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.demo h2 {
+  margin: 0;
+}
+.demo .segmented {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.demo-card {
+  width: 100%;
+  max-width: 900px;
+  overflow: hidden;
+  padding: 0;
+  line-height: 0;
+}
+.demo-card img {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: var(--surface-2);
+}
+.demo-note {
+  margin: 0;
+  font-size: 12.5px;
+}
 .steps {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

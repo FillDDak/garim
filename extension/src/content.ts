@@ -30,8 +30,9 @@ const shadow = rootEl.attachShadow({ mode: 'closed' })
 shadow.innerHTML = `
 <style>
   :host { all: initial; }
-  .wrap { position: fixed; right: 18px; bottom: 18px; z-index: 2147483646; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+  .wrap { position: fixed; right: 18px; top: 64px; z-index: 2147483646; display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 8px; pointer-events: none;
     font-family: 'Pretendard Variable', Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif; font-size: 13px; letter-spacing: -0.01em; }
+  .toast, .pill { pointer-events: auto; }
   .toast { background: #16181f; color: #f2f3f7; border-radius: 12px; padding: 10px 12px 10px 14px; box-shadow: 0 16px 40px -12px rgba(0,0,0,.5);
     display: flex; align-items: center; gap: 10px; max-width: 380px; animation: in .2s ease; }
   .toast b { color: #b6a8ff; }
@@ -47,7 +48,7 @@ shadow.innerHTML = `
     .pill { background: #1b1e27; color: #c3c7d3; border-color: #2a2e3b; }
     .pill.on { background: #231e45; border-color: #3d3480; color: #b6a8ff; }
   }
-  @keyframes in { from { opacity: 0; transform: translateY(6px); } }
+  @keyframes in { from { opacity: 0; transform: translateY(-6px); } }
 </style>
 <div class="wrap">
   <div class="toasts"></div>

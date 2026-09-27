@@ -1,8 +1,9 @@
 import { Bot, ClipboardCheck, Copy, Puzzle, FileLock2, ImageOff, KeyRound, Lock, PlaneTakeoff, ScanSearch, Undo2, WifiOff } from 'lucide-react'
-import { Card } from '../components/ui'
+import { Card, Segmented } from '../components/ui'
 import { GithubMark } from '../components/Logo'
 import { useApp } from '../state/AppState'
 import { copyText } from '../lib/clipboard'
+import { useState } from 'react'
 import { FEEDBACK_EMAIL, FEEDBACK_MAILTO } from '../lib/feedback'
 
 const REPO = 'https://github.com/FillDDak/what'
@@ -100,6 +101,29 @@ function ExtPageLink({ name, url, current }: { name: string; url: string; curren
   )
 }
 
+type DemoId = 'text' | 'image' | 'extension'
+const DEMOS: Array<{ value: DemoId; label: string; alt: string; w: number; h: number }> = [
+  { value: 'text', label: '텍스트 가리기·되돌리기', alt: '글을 붙여넣으면 개인정보가 자리표시자로 가려지고, AI 답변을 붙여넣으면 원래 값으로 돌아오는 화면', w: 885, h: 525 },
+  { value: 'image', label: '이미지 가리기', alt: '카톡 캡처 이미지에서 글자를 인식해 개인정보를 박스로 가리는 화면', w: 885, h: 525 },
+  { value: 'extension', label: '브라우저 확장', alt: 'AI 채팅창에 붙여넣는 순간 개인정보가 가려지고, 답변에서는 내 화면에만 원래 값이 보이는 화면', w: 850, h: 544 },
+]
+
+/** One demo animation at a time, so the guide stays light to load. */
+function DemoViewer() {
+  const [demo, setDemo] = useState<DemoId>('text')
+  const d = DEMOS.find((x) => x.value === demo)!
+  return (
+    <section className="demo">
+      <h2>이렇게 동작해요</h2>
+      <Segmented<DemoId> label="예시 선택" value={demo} options={DEMOS.map(({ value, label }) => ({ value, label }))} onChange={setDemo} size="sm" />
+      <Card className="demo-card">
+        <img key={d.value} src={`demo/${d.value}.gif`} alt={d.alt} width={d.w} height={d.h} loading="lazy" decoding="async" />
+      </Card>
+      <p className="muted demo-note">예시 속 이름·번호는 모두 지어낸 값이에요.</p>
+    </section>
+  )
+}
+
 export function GuideView({ go }: { go: (route: string) => void }) {
   return (
     <div className="view guide-view">
@@ -139,6 +163,8 @@ export function GuideView({ go }: { go: (route: string) => void }) {
           </Card>
         ))}
       </section>
+
+      <DemoViewer />
 
       <section className="features">
         <h2>이런 것까지 해요</h2>

@@ -34,11 +34,21 @@ AI 답변: [이름_1] 과장님께 보낼 메일 초안입니다 …
 되돌리기: 김민수 과장님께 보낼 메일 초안입니다 …
 ```
 
-<p align="center"><img src="docs/text.png" alt="텍스트 가리기 화면" width="100%" /></p>
+### 이렇게 동작해요
 
-| AI 답변 되돌리기 | 캡처 이미지 OCR 가림 |
-| --- | --- |
-| <img src="docs/restore.png" alt="되돌리기 화면" /> | <img src="docs/image.png" alt="이미지 가림 화면" /> |
+**텍스트 가리기 → AI 답변 되돌리기**
+
+<p align="center"><img src="public/demo/text.gif" alt="글을 붙여넣으면 개인정보가 자리표시자로 가려지고, AI 답변을 붙여넣으면 원래 값으로 돌아오는 화면" width="100%" /></p>
+
+**캡처·사진 속 개인정보 가리기**
+
+<p align="center"><img src="public/demo/image.gif" alt="카톡 캡처 이미지에서 글자를 인식해 개인정보를 박스로 가리는 화면" width="100%" /></p>
+
+**브라우저 확장: 붙여넣는 순간 자동으로**
+
+<p align="center"><img src="public/demo/extension.gif" alt="AI 채팅창에 붙여넣는 순간 개인정보가 가려지고, 답변에서는 내 화면에만 원래 값이 보이는 화면" width="100%" /></p>
+
+<sub>예시 속 이름·번호는 모두 지어낸 값입니다.</sub>
 
 ## 주요 기능
 

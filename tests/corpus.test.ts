@@ -140,3 +140,12 @@ describe('romanised names on ID cards with a damaged surname', () => {
     expect(names('회의록\nHO) HYEONGYU\n')).toEqual([])
   })
 })
+
+describe('document nouns are not names', () => {
+  it('does not take 계약서/신청서/영수증 next to contact details as names', () => {
+    const names = detect('신규 고객 이서연 님(010-2345-6789) 계약서 검토 부탁드립니다. 영수증 010-9876-5432 위임장', opts)
+      .filter((e) => e.type === 'name')
+      .map((e) => e.value)
+    expect(names).toEqual(['이서연'])
+  })
+})
