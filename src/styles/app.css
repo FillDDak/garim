@@ -1789,7 +1789,8 @@ input[type='checkbox'] {
   padding: 0;
   line-height: 0;
 }
-.demo-card img {
+.demo-card img,
+.demo-card video {
   width: 100%;
   height: auto;
   display: block;

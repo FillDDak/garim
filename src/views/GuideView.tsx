@@ -103,21 +103,29 @@ function ExtPageLink({ name, url, current }: { name: string; url: string; curren
 
 type DemoId = 'text' | 'image' | 'extension'
 const DEMOS: Array<{ value: DemoId; label: string; alt: string; w: number; h: number }> = [
-  { value: 'text', label: '텍스트 가리기·되돌리기', alt: '글을 붙여넣으면 개인정보가 자리표시자로 가려지고, AI 답변을 붙여넣으면 원래 값으로 돌아오는 화면', w: 885, h: 525 },
-  { value: 'image', label: '이미지 가리기', alt: '카톡 캡처 이미지에서 글자를 인식해 개인정보를 박스로 가리는 화면', w: 885, h: 525 },
-  { value: 'extension', label: '브라우저 확장', alt: 'AI 채팅창에 붙여넣는 순간 개인정보가 가려지고, 답변에서는 내 화면에만 원래 값이 보이는 화면', w: 850, h: 544 },
+  { value: 'text', label: '텍스트 가리기·되돌리기', alt: '글을 붙여넣으면 개인정보가 자리표시자로 가려지고, AI 답변을 붙여넣으면 원래 값으로 돌아오는 화면', w: 1180, h: 700 },
+  { value: 'image', label: '이미지 가리기', alt: '카톡 캡처 이미지에서 글자를 인식해 개인정보를 박스로 가리는 화면', w: 1180, h: 700 },
+  { value: 'extension', label: '브라우저 확장', alt: 'AI 채팅창에 붙여넣는 순간 개인정보가 가려지고, 답변에서는 내 화면에만 원래 값이 보이는 화면', w: 1000, h: 640 },
 ]
 
-/** One demo animation at a time, so the guide stays light to load. */
+/** WebM (VP9) is sharp and small; browsers that can't play it get the GIF. */
+const canPlayWebm = () => typeof document !== 'undefined' && document.createElement('video').canPlayType('video/webm; codecs="vp9"') !== ''
+
+/** One demo at a time, so the guide stays light to load. */
 function DemoViewer() {
   const [demo, setDemo] = useState<DemoId>('text')
+  const [video] = useState(canPlayWebm)
   const d = DEMOS.find((x) => x.value === demo)!
   return (
     <section className="demo">
       <h2>이렇게 동작해요</h2>
       <Segmented<DemoId> label="예시 선택" value={demo} options={DEMOS.map(({ value, label }) => ({ value, label }))} onChange={setDemo} size="sm" />
       <Card className="demo-card">
-        <img key={d.value} src={`demo/${d.value}.gif`} alt={d.alt} width={d.w} height={d.h} loading="lazy" decoding="async" />
+        {video ? (
+          <video key={d.value} src={`demo/${d.value}.webm`} poster={`demo/${d.value}.jpg`} width={d.w} height={d.h} autoPlay muted loop playsInline preload="auto" aria-label={d.alt} />
+        ) : (
+          <img key={d.value} src={`demo/${d.value}.gif`} alt={d.alt} width={d.w} height={d.h} loading="lazy" decoding="async" />
+        )}
       </Card>
       <p className="muted demo-note">예시 속 이름·번호는 모두 지어낸 값이에요.</p>
     </section>
