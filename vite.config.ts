@@ -59,7 +59,7 @@ function serviceWorker(): Plugin {
       walk(outDir)
       // Precache the shell only; OCR models, pdf.js resources and font subsets are cached on first use.
       const precache = files.filter(
-        (f) => !f.startsWith('ocr/') && !f.startsWith('pdfjs/') && !f.endsWith('.woff2') && !f.endsWith('.map') && f !== 'sw.js' && f !== 'og.png' && f !== '404.html' && !f.endsWith('.zip'),
+        (f) => !f.startsWith('ocr/') && !f.startsWith('face/') && !f.startsWith('pdfjs/') && !f.endsWith('.woff2') && !f.endsWith('.map') && f !== 'sw.js' && f !== 'og.png' && f !== '404.html' && !f.endsWith('.zip'),
       )
       const version = createHash('sha256').update(precache.join('|') + Date.now()).digest('hex').slice(0, 10)
       const template = readFileSync(join(process.cwd(), 'scripts', 'sw-template.js'), 'utf8')

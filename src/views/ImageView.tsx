@@ -71,11 +71,12 @@ export function ImageView() {
     async (item: ImageItem) => {
       update(item.id, (it) => ({ ...it, status: 'scanning' }))
       try {
-        const [ocr, codes] = await Promise.all([
+        const [ocr, codes, faces] = await Promise.all([
           detectInImage(item.source, settings.detect, (p) => setProgress(p)),
           detectCodes(item.source),
+          import('../lib/faces').then((m) => m.detectFaces(item.source)),
         ])
-        const boxes = [...ocr.detections, ...codes]
+        const boxes = [...faces, ...ocr.detections, ...codes]
         update(item.id, (it) => ({
           ...it,
           status: 'done',
@@ -287,9 +288,9 @@ export function ImageView() {
           <button type="button" className="dropzone" onClick={() => fileRef.current?.click()}>
             <ImagePlus size={40} strokeWidth={1.5} />
             <strong>캡처·사진을 끌어다 놓거나, Ctrl+V로 붙여넣으세요</strong>
-            <span>카톡 대화, 주문내역, 신분증, 계약서 사진 속 이름·전화번호·주소·계좌번호를 글자 인식(OCR)으로 찾아 가립니다.</span>
+            <span>카톡 대화, 주문내역, 신분증·학생증, 자동차등록증, 계약서 사진 속 이름·주민번호·주소·카드·계좌번호와 얼굴을 찾아 가립니다.</span>
             <span className="dz-meta">
-              PNG · JPG · WEBP · 여러 장 가능 · 기울어지거나 비스듬히 찍은 사진은 자동으로 펴서 인식 · 처음 한 번 인식 모델(약 5MB)을 받은 뒤에는 오프라인에서도 동작
+              PNG · JPG · WEBP · 여러 장 가능 · 기울어지거나 비스듬히 찍은 사진은 자동으로 펴서 인식 · 처음 한 번 글자·얼굴 인식 모델(약 11MB)을 받은 뒤에는 오프라인에서도 동작
             </span>
             <span className="dz-meta">사진은 문서를 정면에서, 화면에 꽉 차게 찍을수록 정확해요</span>
             <span className="btn btn-primary btn-md">이미지 선택</span>

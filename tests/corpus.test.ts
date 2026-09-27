@@ -93,3 +93,37 @@ describe('structured data', () => {
     expect(found('To: the team, please review').filter((x) => x.startsWith('name'))).toEqual([])
   })
 })
+
+describe('id documents and forms', () => {
+  it('romanized names', () => {
+    expect(found('HANA\nCHOI HYEONGYU')).toContain('name:CHOI HYEONGYU')
+    expect(found('CHO) HYEONGYU')).toContain('name:CHO) HYEONGYU')
+    expect(found('HONG GIL-DONG')).toContain('name:HONG GIL-DONG')
+    expect(found('HANA CARD').filter((x) => x.startsWith('name'))).toEqual([])
+    expect(found('KIM CARD').filter((x) => x.startsWith('name'))).toEqual([])
+  })
+  it('standalone name line on an ID card', () => {
+    expect(found('학생증 Student ID Card\n김하늘\n2024123456\n컴퓨터공학과')).toContain('name:김하늘')
+    expect(found('회의록\n김하늘\n안건').filter((x) => x.startsWith('name'))).toEqual([])
+  })
+  it('vehicle registration style form', () => {
+    const t = '성 명(명칭) 홍길동\n주민(법인)등록번호 850101-1234567\n사용본거지 경기도 수원시 팔달구 효원로 241\n차대번호 KMHD341ABCU123456'
+    const r = found(t)
+    expect(r).toContain('name:홍길동')
+    expect(r).toContain('rrn:850101-1234567')
+    expect(r.some((x) => x.startsWith('address:경기도 수원시 팔달구 효원로 241'))).toBe(true)
+    expect(r).toContain('car:KMHD341ABCU123456')
+  })
+  it('OCR-damaged resident number next to a label', () => {
+    expect(found('주민등록번호 851301-1234567')).toContain('rrn:851301-1234567')
+  })
+})
+
+describe('vehicle registration OCR quirks', () => {
+  it('VIN with a stray space and the 소유자 label', () => {
+    const r = found('차대번호.\n\nKMHL341CBMA 123456\n소유자\n성명(명칭) 박수현')
+    expect(r).toContain('car:KMHL341CBMA 123456')
+    expect(r).toContain('name:박수현')
+    expect(r.filter((x) => x === 'name:소유자')).toEqual([])
+  })
+})

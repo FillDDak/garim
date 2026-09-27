@@ -97,7 +97,7 @@ function bestQuad(h: Point[]): Point[] {
  * Finds the four corners of a bright document on a darker background.
  * Returns null when the photo is already a flat scan / screenshot or no clear sheet is visible.
  */
-export function findDocumentQuad(source: HTMLCanvasElement): Point[] | null {
+export function findDocumentQuad(source: HTMLCanvasElement, debug?: { mask?: { w: number; h: number; data: Uint8Array }; reasons?: string[] }): Point[] | null {
   const target = 500
   const s = Math.min(1, target / Math.max(source.width, source.height))
   const w = Math.max(1, Math.round(source.width * s))
@@ -132,65 +132,38 @@ export function findDocumentQuad(source: HTMLCanvasElement): Point[] | null {
   }
   if (!darkN || !lightN || lightSum / lightN - darkSum / darkN < 40) return null
 
-  // largest bright connected component (4-neighbourhood flood fill)
-  const label = new Int32Array(w * h).fill(-1)
-  let bestLabel = -1
-  let bestSize = 0
-  const stack: number[] = []
-  let cur = 0
-  for (let i = 0; i < w * h; i++) {
-    if (gray[i] <= t || label[i] !== -1) continue
-    let size = 0
-    stack.push(i)
-    label[i] = cur
-    while (stack.length) {
-      const p = stack.pop()!
-      size++
-      const x = p % w
-      const y = (p / w) | 0
-      const visit = (q: number) => {
-        if (label[q] === -1 && gray[q] > t) {
-          label[q] = cur
-          stack.push(q)
-        }
-      }
-      if (x > 0) visit(p - 1)
-      if (x < w - 1) visit(p + 1)
-      if (y > 0) visit(p - w)
-      if (y < h - 1) visit(p + w)
-    }
-    if (size > bestSize) {
-      bestSize = size
-      bestLabel = cur
-    }
-    cur++
-  }
-  const areaFrac = bestSize / (w * h)
-  if (areaFrac < 0.12 || areaFrac > 0.95) return null
-
-  // boundary pixels of the component → hull → quad
-  const boundary: Point[] = []
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = y * w + x
-      if (label[i] !== bestLabel) continue
-      if (x === 0 || y === 0 || x === w - 1 || y === h - 1 || label[i - 1] !== bestLabel || label[i + 1] !== bestLabel || label[i - w] !== bestLabel || label[i + w] !== bestLabel)
-        boundary.push([x, y])
+  // Bright mask, closed morphologically so thin dark lines printed across the card (arcs, text)
+  // don't split the sheet into several pieces.
+  const mask = new Uint8Array(w * h)
+  for (let i = 0; i < w * h; i++) mask[i] = gray[i] > t ? 1 : 0
+  // opening removes speckles (textured leather, wood grain); closing bridges printed lines
+  const ro = Math.max(1, Math.round(Math.min(w, h) * 0.006))
+  const rc = Math.max(3, Math.round(Math.min(w, h) * 0.03))
+  const opened = dilate(erode(mask, w, h, ro), w, h, ro)
+  const joined = erode(dilate(opened, w, h, rc), w, h, rc)
+  // A strong opening cuts bridges between the sheet and other bright areas (desk, wall). Start
+  // gentle and get stronger until a sheet-shaped region separates out.
+  let best: { quad: Point[]; size: number; score: number } | null = null
+  let rb = 0
+  for (const frac of [0.05, 0.08, 0.11, 0.14]) {
+    const r = Math.max(4, Math.round(Math.min(w, h) * frac))
+    const closed = dilate(erode(joined, w, h, r), w, h, r)
+    if (debug && !debug.mask) debug.mask = { w, h, data: closed }
+    const found = findSheet(closed, w, h, debug)
+    if (found && (!best || found.score > best.score * 1.05)) {
+      best = found
+      rb = r
     }
   }
-  const hl = hull(boundary)
-  if (hl.length < 4) return null
-  const quad = bestQuad(hl)
-  const qa = polygonArea(quad)
-  // the sheet must really be quadrilateral (not a blob) and not touch most of the frame edges
-  if (qa < bestSize * 0.85 || qa > bestSize * 1.3) return null
-  const touching = quad.filter(([x, y]) => x <= 1 || y <= 1 || x >= w - 2 || y >= h - 2).length
-  if (touching >= 3) return null
-  // ignore if it is already an axis-aligned, undistorted rectangle (nothing to correct)
-  const [tl, tr, br, bl] = quad
-  const skewed =
-    Math.abs(tl[1] - tr[1]) > h * 0.02 || Math.abs(bl[1] - br[1]) > h * 0.02 || Math.abs(tl[0] - bl[0]) > w * 0.02 || Math.abs(tr[0] - br[0]) > w * 0.02
-  if (!skewed) return null
+  if (!best) return null
+  // the strong opening rounds the corners inwards: push each corner back out along its diagonal
+  const cx = best.quad.reduce((a, p) => a + p[0], 0) / 4
+  const cy = best.quad.reduce((a, p) => a + p[1], 0) / 4
+  const push = rb * 0.45
+  const quad = best.quad.map(([x, y]) => {
+    const d = Math.hypot(x - cx, y - cy) || 1
+    return [x + ((x - cx) / d) * push, y + ((y - cy) / d) * push] as Point
+  })
   return quad.map(([x, y]) => [x / s, y / s] as Point)
 }
 
@@ -278,4 +251,109 @@ export function warpQuad(source: HTMLCanvasElement, quad: Point[], maxSide = 240
   }
   ctx.putImageData(out, 0, 0)
   return { canvas, toSource: (x, y) => applyH(toSrc, x, y) }
+}
+
+/** Binary dilation with a square window (separable running max). */
+function dilate(m: Uint8Array, w: number, h: number, r: number): Uint8Array {
+  return morph(m, w, h, r, 1)
+}
+
+/** Binary erosion with a square window (separable running min). */
+function erode(m: Uint8Array, w: number, h: number, r: number): Uint8Array {
+  return morph(m, w, h, r, 0)
+}
+
+function morph(m: Uint8Array, w: number, h: number, r: number, target: 0 | 1): Uint8Array {
+  // dilation: pixel becomes 1 if any neighbour is 1; erosion: becomes 0 if any neighbour is 0
+  const tmp = new Uint8Array(w * h)
+  const out = new Uint8Array(w * h)
+  for (let y = 0; y < h; y++) {
+    let count = 0
+    for (let x = -r; x < w; x++) {
+      const add = x + r
+      if (add < w && m[y * w + add] === target) count++
+      const rem = x - r - 1
+      if (rem >= 0 && m[y * w + rem] === target) count--
+      if (x >= 0) tmp[y * w + x] = count > 0 ? target : 1 - target
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    let count = 0
+    for (let y = -r; y < h; y++) {
+      const add = y + r
+      if (add < h && tmp[add * w + x] === target) count++
+      const rem = y - r - 1
+      if (rem >= 0 && tmp[rem * w + x] === target) count--
+      if (y >= 0) out[y * w + x] = count > 0 ? target : 1 - target
+    }
+  }
+  return out
+}
+
+/** Best quadrilateral bright component of a binary mask (not touching 2+ image borders). */
+function findSheet(closed: Uint8Array, w: number, h: number, debug?: { reasons?: string[] }): { quad: Point[]; size: number; score: number } | null {
+  // Candidate sheets: bright components that are quadrilateral and not the (edge-touching) table
+  const label = new Int32Array(w * h).fill(-1)
+  const stack: number[] = []
+  let cur = 0
+  let best: { quad: Point[]; size: number; score: number } | null = null
+  for (let i = 0; i < w * h; i++) {
+    if (!closed[i] || label[i] !== -1) continue
+    let size = 0
+    let touchTop = 0
+    let touchBottom = 0
+    let touchLeft = 0
+    let touchRight = 0
+    const boundary: Point[] = []
+    stack.push(i)
+    label[i] = cur
+    while (stack.length) {
+      const p = stack.pop()!
+      size++
+      const x = p % w
+      const y = (p / w) | 0
+      if (y === 0) touchTop++
+      if (y === h - 1) touchBottom++
+      if (x === 0) touchLeft++
+      if (x === w - 1) touchRight++
+      let edge = x === 0 || y === 0 || x === w - 1 || y === h - 1
+      const visit = (q: number) => {
+        if (!closed[q]) {
+          edge = true
+          return
+        }
+        if (label[q] === -1) {
+          label[q] = cur
+          stack.push(q)
+        }
+      }
+      if (x > 0) visit(p - 1)
+      if (x < w - 1) visit(p + 1)
+      if (y > 0) visit(p - w)
+      if (y < h - 1) visit(p + w)
+      if (edge) boundary.push([x, y])
+    }
+    cur++
+    const areaFrac = size / (w * h)
+    if (areaFrac < 0.06 || areaFrac > 0.92) continue
+    const why = (r: string) => debug?.reasons?.push(`${size} ${r}`)
+    const bordersTouched = [touchTop > w * 0.05, touchBottom > w * 0.05, touchLeft > h * 0.05, touchRight > h * 0.05].filter(Boolean).length
+    if (bordersTouched >= 2) {
+      why(`touches ${bordersTouched} borders`)
+      continue
+    }
+    const hl = hull(boundary)
+    if (hl.length < 4) continue
+    const quad = bestQuad(hl)
+    const qa = polygonArea(quad)
+    // must really be a quadrilateral sheet, not a blob
+    if (qa < size * 0.85 || qa > size * 1.25) {
+      why(`not quad-like ${(qa / size).toFixed(2)}`)
+      continue
+    }
+    // a sheet lying fully inside the photo is far more likely than a bright area cut by the frame
+    const score = size * (bordersTouched ? 0.45 : 1)
+    if (!best || score > best.score) best = { quad, size, score }
+  }
+  return best
 }

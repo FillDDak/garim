@@ -49,7 +49,7 @@ function groupRange(m: RegExpExecArray, g: number): [number, number] | null {
 }
 
 // ─── 주민등록번호 / 외국인등록번호 / 법인등록번호 ──────────────────────────
-const RRN_RE = /(?<![\d])(\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))(\s?[-–]\s?|\s)?([0-9])(\d{6}|\*{6}|[xX]{6}|●{6})(?![\d])/g
+const RRN_RE = /(?<![\d])(\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))(\s?[-–~_]\s?|\s)?([0-9])(\d{6}|\*{6}|[xX]{6}|●{6})(?![\d])/g
 
 const detectRRN: Detector = (text) => {
   const out: Candidate[] = []
@@ -64,9 +64,15 @@ const detectRRN: Detector = (text) => {
     const ctx = before(text, start, 20)
     const digits = front + m[3] + (masked ? '' : tail)
 
-    // 법인등록번호: not a valid birth date, or explicitly labelled
-    if (!masked && (/법인/.test(ctx) || !isValidBirthDate(front, g))) {
-      if (/법인/.test(ctx) || (sep && corpNoChecksum(digits))) {
+    // 법인등록번호: not a valid birth date, or explicitly labelled ("주민(법인)등록번호" is still personal)
+    const corpLabel = /법인/.test(ctx) && !/주민/.test(ctx)
+    if (!masked && (corpLabel || !isValidBirthDate(front, g))) {
+      if (/주민|외국인/.test(ctx)) {
+        // labelled as a resident number but the date looks off (OCR misread): still mask it
+        out.push({ type: 'rrn', start, end, confidence: 'medium', source: 'context', note: '주민등록번호 항목' })
+        continue
+      }
+      if (corpLabel || (sep && corpNoChecksum(digits))) {
         out.push({ type: 'corpno', start, end, confidence: corpNoChecksum(digits) ? 'high' : 'medium', source: 'rule', note: corpNoChecksum(digits) ? '체크섬 검증됨' : undefined })
       }
       continue
@@ -270,6 +276,46 @@ const detectAddress: Detector = (text) => {
   return out
 }
 
+// ─── 항목명으로 찾기 (신분증·등록증·서식) ──────────────────────────────────
+const sp = (label: string) => label.split('').join('\\s?')
+const ADDRESS_LABELS = ['주소', '사용본거지', '소재지', '주소지', '거주지', '등록기준지', '본적', '현주소', '실거주지', '배송지', '받는주소']
+const ADDRESS_LABEL_RE = new RegExp(`(?:${ADDRESS_LABELS.map(sp).join('|')})\\s*(?:\\([^)\\n]{0,10}\\))?\\s*[:：]?[ \\t]*([^\\n]{4,90})`, 'gd')
+const ADDRESS_WORD_RE = new RegExp(`[${H}\\d]+(?:특별시|광역시|자치시|자치도|도|시|군|구|읍|면|동|리|로|길|가)(?![${H}])`)
+// "주민등록번호 851301-…" when OCR garbled the date part
+const LABELLED_RRN_RE = /(?:주\s?민|외\s?국\s?인)[^\n\d]{0,16}(\d{6}\s?[-–~_]\s?[0-9][\d*●xX]{6})(?![\d])/gd
+const VIN_RE = /(?:차\s?대\s?번\s?호|VIN)[^A-Z0-9]{0,6}([A-HJ-NPR-Z0-9](?: ?[A-HJ-NPR-Z0-9]){16})(?![A-Z0-9])/gd
+// Korean-built vehicles (WMI KM*, KN*, KL*, KP*) are recognisable without a label
+const KR_VIN_RE = /(?<![A-Z0-9])(K[LMNP][A-HJ-NPR-Z0-9](?: ?[A-HJ-NPR-Z0-9]){14})(?![A-Z0-9])/g
+
+const detectLabelled: Detector = (text) => {
+  const out: Candidate[] = []
+  for (const m of matches(ADDRESS_LABEL_RE, text)) {
+    const r = groupRange(m, 1)
+    if (!r) continue
+    let value = m[1]
+    // stop at the next label of a form ("사용본거지 … 성명(명칭) …")
+    const cut = value.search(/\s{2,}(?:성\s?명|이\s?름|주민|생년|연락처|전화|차\s?명|차종|용도|형식|최초)/)
+    if (cut > 0) value = value.slice(0, cut)
+    value = value.replace(/[\s,.|]+$/, '')
+    if (!/[가-힣]/.test(value) || !ADDRESS_WORD_RE.test(value)) continue
+    out.push({ type: 'address', start: r[0], end: r[0] + value.length, confidence: 'high', source: 'context', note: '주소 항목' })
+  }
+  for (const m of matches(LABELLED_RRN_RE, text)) {
+    const r = groupRange(m, 1)
+    if (r) out.push({ type: 'rrn', start: r[0], end: r[1], confidence: 'medium', source: 'context', note: '주민등록번호 항목' })
+  }
+  for (const m of matches(VIN_RE, text)) {
+    const r = groupRange(m, 1)
+    if (r) out.push({ type: 'car', start: r[0], end: r[1], confidence: 'high', source: 'context', note: '차대번호' })
+  }
+  for (const m of matches(KR_VIN_RE, text)) {
+    // real VINs mix letters and digits
+    if (!/\d.*\d.*\d/.test(m[1]) || !/[A-Z].*[A-Z].*[A-Z]/.test(m[1])) continue
+    out.push({ type: 'car', start: m.index, end: m.index + m[1].length, confidence: 'medium', source: 'rule', note: '차대번호 형식' })
+  }
+  return out
+}
+
 // ─── IP 주소 ───────────────────────────────────────────────────────────────
 const IPV4_RE = /(?<![\d.])(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?::\d{2,5})?(?![\d.]|\.\d)/g
 const IPV6_RE = /(?<![\w:])((?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})(?![\w:])/g
@@ -364,12 +410,13 @@ const detectBirth: Detector = (text) => {
 
 // ─── 이름 ──────────────────────────────────────────────────────────────────
 
+const spaced = (l: string) => (/^[가-힣]{2,3}$/.test(l) ? l.split('').join('\\s?') : l)
 const LOOSE_LABELS = NAME_LABELS.filter((l) => l.replace(/\\s\?/g, '').length >= 3 || ['이름', '성명', '성함'].includes(l))
 const NAME_LABEL_COLON_RE = new RegExp(
-  `(?<![${H}A-Za-z])(?:${NAME_LABELS.join('|')}|(?:customer|user|full|first|last|real|display|contact|account|holder)?[_ -]?name|customer|From|To|Cc|보낸\\s?사람|받는\\s?사람)["']?\\s*(?:\\([^)]{0,10}\\))?\\s*[:：=]\\s*["']?([${H}]{2,5}|[A-Z][a-z]+(?: [A-Z][a-z]+){1,2})(?![${H}A-Za-z])`,
+  `(?<![${H}A-Za-z])(?:${NAME_LABELS.map(spaced).join('|')}|(?:customer|user|full|first|last|real|display|contact|account|holder)?[_ -]?name|customer|From|To|Cc|보낸\\s?사람|받는\\s?사람)["']?\\s*(?:\\([^)]{0,10}\\))?\\s*[:：=]\\s*["']?([${H}]{2,5}|[A-Z][a-z]+(?: [A-Z][a-z]+){1,2})(?![${H}A-Za-z])`,
   'gid',
 )
-const NAME_LABEL_SPACE_RE = new RegExp(`(?<![${H}])(?:${LOOSE_LABELS.join('|')})\\s+([${H}]{2,4})(?![${H}])`, 'gid')
+const NAME_LABEL_SPACE_RE = new RegExp(`(?<![${H}])(?:${LOOSE_LABELS.map(spaced).join('|')})\\s*(?:\\([^)\\n]{0,10}\\))?\\s+([${H}]{2,4})(?![${H}])`, 'gid')
 const PARTICLE_ALT = KOREAN_PARTICLES.map(escapeRe).join('|')
 const LONG_TITLES = NAME_TITLES.filter((t) => t.length >= 2).map(escapeRe).join('|') + '|(?:드림|올림|배상)(?![가-힣])'
 const SHORT_TITLES = NAME_TITLES.filter((t) => t.length === 1).map(escapeRe).join('|')
@@ -412,8 +459,29 @@ const NAME_INTRO_RE = new RegExp(`(?:안녕하세요|안녕하십니까|반갑�
 // "Mr. John Smith", "Dr. Kim"
 const NAME_EN_TITLE_RE = /\b(?:Mr|Mrs|Ms|Miss|Dr|Prof)\.?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/gd
 
+const ROMAN_SURNAMES =
+  'KIM|LEE|YI|RHEE|PARK|PAK|CHOI|CHOE|CHOY|JUNG|JEONG|CHUNG|KANG|CHO|JO|YOON|YUN|JANG|CHANG|LIM|IM|HAN|OH|SEO|SUH|SHIN|SIN|KWON|HWANG|AHN|AN|SONG|JEON|JUN|CHUN|HONG|YOO|YU|RYU|KO|KOH|GO|MOON|MUN|YANG|SON|SOHN|BAE|BAEK|PAIK|HEO|HUH|NAM|SIM|SHIM|NOH|ROH|HA|KWAK|SUNG|SEONG|CHA|JOO|JU|WOO|KOO|KU|MIN|NA|JIN|JI|UM|EOM|CHAE|WON|BANG|GONG|HYUN|HAM|BYUN|BYEON|YEOM|CHOO|DO|SO|SEOK|SUK|SEOL|MA|GIL|YEON|WI|PYO|MYUNG|KI|BAN|WANG|GEUM|OK|YOOK|IN|MAENG|JE|MO|TAK|KUK|EUN|PYEON|YONG'
+// "CHOI HYEONGYU", "HONG GIL-DONG", OCR-damaged "CHO) HYEONGYU" (uppercase, as printed on cards/passports)
+const ROMAN_NAME_RE = new RegExp(`(?<![A-Za-z])((?:${ROMAN_SURNAMES})[)|!.,]?[ ]{1,3}[A-Z]{2,}(?:[- ]?[A-Z]{2,})?)(?![A-Za-z])`, 'g')
+const ROMAN_STOP = /\b(CARD|BANK|VALID|THRU|MONTH|YEAR|STUDENT|KOREA|REPUBLIC|SEOUL|CITY|CO|LTD|INC|CORP|UNIVERSITY|COLLEGE|MEMBER|CLASS|GOLD|PLATINUM|DEBIT|CREDIT|CHECK|MASTER|VISA|NAME|DATE|NO|ID|TYPE|SEX|ISSUE|EXPIRY|PASSPORT|NATIONALITY|AUTHORITY|OF)\b/
+
+// ID documents: a line holding only a name ("최현규" under "학생증") is the holder's name
+export const ID_DOC_RE = /학생증|주민등록증|운전면허증|자동차등록증|신분증|사원증|공무원증|외국인등록증|등록증|면허증|여권|건강보험증|복지카드|STUDENT\s?ID|ID\s?CARD|EMPLOYEE|PASSPORT|DRIVER/i
+const ID_NAME_LINE_RE = new RegExp(`(?:^|\\n)[^${H}\\n]{0,4}([${H}]{3,4})[^${H}\\n]{0,4}(?=\\n|$)`, 'gd')
+
 export const detectNamesExtra: Detector = (text) => {
   const out: Candidate[] = []
+  for (const m of matches(ROMAN_NAME_RE, text)) {
+    if (ROMAN_STOP.test(m[1].replace(/^[A-Z]+[)|!.,]?\s+/, ''))) continue
+    out.push({ type: 'name', start: m.index, end: m.index + m[1].length, confidence: 'medium', source: 'context', note: '영문 이름' })
+  }
+  if (ID_DOC_RE.test(text)) {
+    for (const m of matches(ID_NAME_LINE_RE, text)) {
+      const r = groupRange(m, 1)
+      if (!r || !isPlausibleName(m[1])) continue
+      out.push({ type: 'name', start: r[0], end: r[1], confidence: 'medium', source: 'context', note: '신분증 속 이름' })
+    }
+  }
   for (const m of matches(NAME_INTRO_RE, text)) {
     const r = groupRange(m, 1)
     if (!r || !isPlausibleName(m[1])) continue
@@ -449,6 +517,7 @@ export const DETECTORS: Array<[EntityType | EntityType[], Detector]> = [
   ['passport', detectPassport],
   ['car', detectCar],
   ['address', detectAddress],
+  [['address', 'car', 'rrn'], detectLabelled],
   ['ip', detectIP],
   ['birth', detectBirth],
   ['name', detectNamesBasic],

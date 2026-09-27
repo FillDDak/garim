@@ -170,13 +170,14 @@ export async function redactPdf(
     const pt = result.pages[i]
     if (ocr && isScanLike(pt.text)) {
       const { detectInImage } = await import('../ocr')
-      const { detections } = await detectInImage(canvas, ocr.detect)
+      const { detectFaces } = await import('../faces')
+      const [{ detections }, faces] = await Promise.all([detectInImage(canvas, ocr.detect), detectFaces(canvas)])
       const { paintRedaction } = await import('../redact')
-      for (const d of detections) paintRedaction(ctx, d.box, style)
+      for (const d of [...detections, ...faces]) paintRedaction(ctx, d.box, style)
       ctx.fillStyle = style === 'black' ? '#000' : '#fff'
       ocrPages++
-      ocrFound += detections.length
-      ocr.onScan?.(i + 1, detections.length)
+      ocrFound += detections.length + faces.length
+      ocr.onScan?.(i + 1, detections.length + faces.length)
     }
     for (const e of active) {
       for (const it of pt.items) {
