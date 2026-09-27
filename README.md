@@ -95,6 +95,13 @@ npm run build    # dist/ 에 정적 사이트 생성 (CSP, 서비스 워커 포�
 `main` 브랜치에 push하면 GitHub Actions가 테스트 → 빌드 → `gh-pages` 브랜치로 배포합니다.
 처음 한 번 저장소 **Settings → Pages → Build and deployment → Source: Deploy from a branch → `gh-pages` / `(root)`** 로 설정하면 `https://<사용자>.github.io/<저장소>/`에서 열립니다.
 
+## 건의·오류 제보
+
+필요한 기능, 불편한 점, 잘못 가려지거나 놓친 개인정보가 있다면 [cgr456@naver.com](mailto:cgr456@naver.com)으로 알려 주세요.
+예시를 보내실 때는 실제 개인정보를 지우거나 가짜 값으로 바꿔 주세요.
+
+가림은 오류 보고·사용 통계를 수집하지 않습니다. 크롬 확장 관리 화면의 ‘오류 수집’ 스위치는 크롬 자체 기능으로, 오류를 사용자 브라우저에만 기록합니다.
+
 ## 라이선스
 
 MIT

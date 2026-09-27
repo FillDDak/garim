@@ -7,6 +7,7 @@ import { TextView } from './views/TextView'
 import { RestoreView } from './views/RestoreView'
 import { SettingsView } from './views/SettingsView'
 import { GuideView } from './views/GuideView'
+import { FEEDBACK_EMAIL, FEEDBACK_MAILTO } from './lib/feedback'
 
 const FileView = lazy(() => import('./views/FileView').then((m) => ({ default: m.FileView })))
 const ImageView = lazy(() => import('./views/ImageView').then((m) => ({ default: m.ImageView })))
@@ -218,6 +219,10 @@ function Shell() {
           <ShieldCheck size={14} /> 모든 처리는 이 기기에서만 · 오픈소스 ·{' '}
           <a href="https://github.com/FillDDak/what" target="_blank" rel="noreferrer">
             GitHub
+          </a>{' '}
+          ·{' '}
+          <a href={FEEDBACK_MAILTO} title={`건의·오류 제보: ${FEEDBACK_EMAIL}`}>
+            의견 보내기
           </a>
         </span>
         <span className="muted">가림은 실수를 줄여 주는 도구예요. 보내기 전에 결과를 한 번 확인해 주세요.</span>

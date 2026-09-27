@@ -3,6 +3,7 @@ import { Card } from '../components/ui'
 import { GithubMark } from '../components/Logo'
 import { useApp } from '../state/AppState'
 import { copyText } from '../lib/clipboard'
+import { FEEDBACK_EMAIL, FEEDBACK_MAILTO } from '../lib/feedback'
 
 const REPO = 'https://github.com/FillDDak/what'
 
@@ -35,6 +36,21 @@ const FAQ: Array<[string, React.ReactNode]> = [
   [
     '복원 키는 어디에 저장되나요?',
     <>이 브라우저의 저장소(localStorage)에만 저장되고, 기본 24시간 뒤 자동으로 지워져요. 설정에서 ‘저장 안 함’부터 ‘직접 지울 때까지’까지 고를 수 있어요.</>,
+  ],
+  [
+    '오류나 사용 기록을 수집하나요?',
+    <>
+      아니요. 웹사이트와 확장 프로그램 모두 오류 보고·사용 통계·광고 추적 코드가 없고, 어떤 정보도 밖으로 보내지 않아요. 크롬 확장 프로그램 관리 화면의 <b>‘오류 수집’</b> 스위치는 크롬 자체 기능으로, 켜
+      두면 확장 프로그램에서 난 오류를 <b>내 브라우저의 오류 목록에만</b> 기록해 보여 줘요. 가림 개발자에게 전송되지 않아요.
+    </>,
+  ],
+  [
+    '건의 사항이나 오류는 어디로 알려 주나요?',
+    <>
+      필요한 기능, 불편한 점, 잘못 가려지거나 놓친 개인정보가 있다면{' '}
+      <a href={FEEDBACK_MAILTO}>{FEEDBACK_EMAIL}</a>로 알려 주세요. 어떤 화면에서 무엇을 했는지 적어 주시면 더 빨리 고칠 수 있어요. 예시를 보내실 때는{' '}
+      <b>실제 개인정보를 지우거나 가짜 값으로 바꿔서</b> 보내 주세요.
+    </>,
   ],
   [
     '회사에서 써도 되나요?',
