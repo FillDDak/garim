@@ -90,20 +90,26 @@ export async function detectInImage(
   // rotation (Tesseract loses most Korean text beyond ~5° of skew). The whole image is always
   // recognised as well, so text outside a detected sheet is never skipped.
   const views: View[] = []
-  const quad = findDocumentQuad(source)
+  // sideways / upside-down photos without EXIF orientation: turn them upright first
+  const angle = await detectOrientation(worker, source)
+  const base = angle ? rotateCanvas(source, angle) : { canvas: source, toSource: (x: number, y: number): [number, number] => [x, y] }
+  const quad = findDocumentQuad(base.canvas)
   if (quad) {
-    const flat = warpQuad(source, quad)
-    views.push(straighten(flat.canvas, flat.toSource, source))
+    const flat = warpQuad(base.canvas, quad)
+    views.push(straighten(flat.canvas, (x, y) => base.toSource(...flat.toSource(x, y)), source))
   }
-  views.push(straighten(source, (x, y) => [x, y], source))
+  views.push(straighten(base.canvas, base.toSource, source))
 
   const detections: Detection[] = []
   let text = ''
   let entities: Entity[] = []
+  let quadWeak = false
   for (const [i, view] of views.entries()) {
-    // with a detected sheet, the whole photo is only a safety net: a lighter, faster pass
-    const thorough = !(quad && i > 0)
+    // with a detected sheet, the whole photo is only a safety net (a lighter, faster pass) unless
+    // the sheet view read little: the outline found may not be the document at all
+    const thorough = !(quad && i > 0) || quadWeak
     const r = await recognizeView(worker, view, opts, thorough)
+    if (quad && i === 0) quadWeak = r.detections.filter((d) => !(d.type === 'custom' && d.label === '번호')).length < 2
     if (!entities.length && r.entities.length) {
       text = r.text
       entities = r.entities
@@ -112,6 +118,52 @@ export async function detectInImage(
     if (view.work !== source) view.work.width = view.work.height = 0
   }
   return { detections, text, entities }
+}
+
+/**
+ * Photos taken sideways or upside down (and stripped of EXIF orientation) are unreadable for
+ * Tesseract. Returns the rotation (degrees) under which a quick OCR pass reads the most confident
+ * words; 0 unless another orientation is clearly better.
+ */
+async function detectOrientation(worker: Worker, source: HTMLCanvasElement): Promise<number> {
+  const s = Math.min(1, 1200 / Math.max(source.width, source.height))
+  const small = document.createElement('canvas')
+  small.width = Math.max(1, Math.round(source.width * s))
+  small.height = Math.max(1, Math.round(source.height * s))
+  small.getContext('2d')!.drawImage(source, 0, 0, small.width, small.height)
+  await worker.setParameters({ tessedit_pageseg_mode: '11', thresholding_method: '0' } as never)
+  const score = async (c: HTMLCanvasElement) => {
+    const { data } = await worker.recognize(c, {}, { blocks: true })
+    let n = 0
+    for (const b of data.blocks ?? [])
+      for (const p of b.paragraphs)
+        for (const l of p.lines)
+          for (const w of l.words) {
+            const t = w.text.trim()
+            if (w.confidence >= 75 && /^[가-힣A-Za-z0-9]{2,}$/.test(t)) n += t.length
+          }
+    return n
+  }
+  try {
+    const s0 = await score(small)
+    debugLog(`ORIENT 0=${s0}`)
+    if (s0 >= 30) return 0
+    let best = 0
+    let bestScore = s0
+    for (const a of [90, 270, 180]) {
+      const r = rotateCanvas(small, a)
+      const v = await score(r.canvas)
+      r.canvas.width = r.canvas.height = 0
+      debugLog(`ORIENT ${a}=${v}`)
+      if (v > bestScore) {
+        best = a
+        bestScore = v
+      }
+    }
+    return bestScore >= Math.max(s0 * 1.6, s0 + 10) ? best : 0
+  } finally {
+    small.width = small.height = 0
+  }
 }
 
 interface View {
@@ -663,38 +715,79 @@ function extrapolateCardNumber(glyphs: Array<Glyph | null>, text: string, start:
  */
 function addDetection(list: Detection[], d: Detection) {
   const area = (b: OcrBox) => b.w * b.h
+  const generic = (t: Detection) => t.type === 'custom' && t.label === '번호'
+  // keep the more specific type (계좌번호 beats a generic "번호")
+  const withType = (keep: Detection, x: Detection) => {
+    if (generic(keep) && (!generic(x) || !generic(d))) {
+      const specific = generic(x) ? d : x
+      return { ...keep, type: specific.type, label: specific.label, text: specific.text }
+    }
+    return keep
+  }
   for (let i = 0; i < list.length; i++) {
     const x = list[i]
     const o = overlap(x.box, d.box)
-    if (o > 0.5 || (x.type === d.type && o > 0.35)) {
-      // keep the larger one (only axis-aligned boxes are merged; polygons stay as found)
-      const generic = (t: Detection) => t.type === 'custom' && t.label === '번호'
-      const bigger = area(d.box) > area(x.box) * 1.15 && !x.box.quad && !d.box.quad
-      // keep the larger box, and the more specific type (계좌번호 beats a generic "번호")
-      const keep = bigger ? { ...d } : { ...x }
-      if (!x.box.quad && !d.box.quad && x.type !== 'face' && d.type !== 'face') {
-        // same text found twice: cover both horizontally, but keep the tighter vertical extent
-        const a = x.box
-        const b = d.box
-        const xl = Math.min(a.x, b.x)
-        const xr = Math.max(a.x + a.w, b.x + b.w)
-        const yt = Math.max(a.y, b.y)
-        const yb = Math.min(a.y + a.h, b.y + b.h)
-        const tighter = a.h <= b.h ? a : b
-        const box = yb - yt >= tighter.h * 0.7 ? { x: xl, y: yt, w: xr - xl, h: yb - yt } : { x: xl, y: tighter.y, w: xr - xl, h: tighter.h }
-        keep.box = box
+    if (!(o > 0.5 || (x.type === d.type && o > 0.35))) continue
+    if (x.box.quad || d.box.quad || x.type === 'face' || d.type === 'face') {
+      // polygons (found on a straightened/flattened copy) cannot be unioned: keep whichever
+      // contains the other, and keep both when neither does, so nothing is left uncovered
+      if (covers(x.box, d.box)) {
+        list[i] = withType(x, x)
+        return
       }
-      if (generic(keep) && (!generic(x) || !generic(d))) {
-        const specific = generic(x) ? d : x
-        keep.type = specific.type
-        keep.label = specific.label
-        keep.text = specific.text
+      if (covers(d.box, x.box)) {
+        list[i] = withType({ ...d }, x)
+        return
       }
-      list[i] = keep
-      return
+      continue
     }
+    const keep = area(d.box) > area(x.box) * 1.15 ? { ...d } : { ...x }
+    // same text found twice: cover both horizontally, but keep the tighter vertical extent
+    const a = x.box
+    const b = d.box
+    const xl = Math.min(a.x, b.x)
+    const xr = Math.max(a.x + a.w, b.x + b.w)
+    const yt = Math.max(a.y, b.y)
+    const yb = Math.min(a.y + a.h, b.y + b.h)
+    const tighter = a.h <= b.h ? a : b
+    keep.box = yb - yt >= tighter.h * 0.7 ? { x: xl, y: yt, w: xr - xl, h: yb - yt } : { x: xl, y: tighter.y, w: xr - xl, h: tighter.h }
+    list[i] = withType(keep, x)
+    return
   }
   list.push(d)
+}
+
+const cornersOf = (b: OcrBox): Array<[number, number]> =>
+  b.quad ?? [
+    [b.x, b.y],
+    [b.x + b.w, b.y],
+    [b.x + b.w, b.y + b.h],
+    [b.x, b.y + b.h],
+  ]
+
+/** True when every corner of `inner` lies inside `outer` (within a small tolerance). */
+export function covers(outer: OcrBox, inner: OcrBox): boolean {
+  const poly = cornersOf(outer)
+  const side = Math.min(...poly.map((p, i) => Math.hypot(p[0] - poly[(i + 1) % 4][0], p[1] - poly[(i + 1) % 4][1])))
+  const tol = side * 0.3
+  return cornersOf(inner).every((p) => pointInPoly(p, poly) || poly.some((a, i) => segDist(p, a, poly[(i + 1) % 4]) <= tol))
+}
+
+function pointInPoly([x, y]: [number, number], poly: Array<[number, number]>): boolean {
+  let inside = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i]
+    const [xj, yj] = poly[j]
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside
+  }
+  return inside
+}
+
+function segDist([px, py]: [number, number], [ax, ay]: [number, number], [bx, by]: [number, number]): number {
+  const dx = bx - ax
+  const dy = by - ay
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / Math.max(1e-9, dx * dx + dy * dy)))
+  return Math.hypot(px - ax - t * dx, py - ay - t * dy)
 }
 
 /** Ink-oriented grayscale copy of a canvas (0–255). */

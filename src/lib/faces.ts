@@ -32,21 +32,46 @@ function loadFaceApi(): Promise<FaceApi> {
 export async function detectFaces(canvas: HTMLCanvasElement): Promise<Detection[]> {
   try {
     const faceapi = await loadFaceApi()
-    const results = await faceapi.detectAllFaces(canvas, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.35, maxResults: 30 }))
-    return results.map((r, i) => {
-      const b = r.box
-      const padX = b.width * 0.3
-      const padTop = b.height * 0.45
-      const padBottom = b.height * 0.4
-      const x = Math.max(0, b.x - padX)
-      const y = Math.max(0, b.y - padTop)
-      const w = Math.min(canvas.width - x, b.width + padX * 2)
-      const h = Math.min(canvas.height - y, b.height + padTop + padBottom)
+    const find = async (c: HTMLCanvasElement, minConfidence: number) =>
+      (await faceapi.detectAllFaces(c, new faceapi.SsdMobilenetv1Options({ minConfidence, maxResults: 30 }))).map((r) => {
+        const b = r.box
+        const padX = b.width * 0.3
+        const padTop = b.height * 0.45
+        const padBottom = b.height * 0.4
+        return { score: r.score, x0: b.x - padX, y0: b.y - padTop, x1: b.x + b.width + padX, y1: b.y + b.height + padBottom }
+      })
+    let found = await find(canvas, 0.35)
+    let toSource: ((x: number, y: number) => [number, number]) | null = null
+    // the detector only finds upright faces: try a sideways / upside-down photo turned upright
+    // (stricter threshold, so documents without a photo don't pick up false faces)
+    if (!found.length) {
+      const { rotateCanvas } = await import('./deskew')
+      for (const a of [90, 270, 180]) {
+        const r = rotateCanvas(canvas, a)
+        found = await find(r.canvas, 0.6)
+        r.canvas.width = r.canvas.height = 0
+        if (found.length) {
+          toSource = r.toSource
+          break
+        }
+      }
+    }
+    return found.map((f, i) => {
+      let { x0, y0, x1, y1 } = f
+      if (toSource) {
+        const pts = [toSource(x0, y0), toSource(x1, y0), toSource(x1, y1), toSource(x0, y1)]
+        x0 = Math.min(...pts.map((p) => p[0]))
+        x1 = Math.max(...pts.map((p) => p[0]))
+        y0 = Math.min(...pts.map((p) => p[1]))
+        y1 = Math.max(...pts.map((p) => p[1]))
+      }
+      const x = Math.max(0, x0)
+      const y = Math.max(0, y0)
       return {
-        id: `face:${i}:${Math.round(b.x)}:${Math.round(b.y)}`,
+        id: `face:${i}:${Math.round(x)}:${Math.round(y)}`,
         type: 'face' as const,
-        text: `얼굴 (${Math.round(r.score * 100)}%)`,
-        box: { x, y, w, h },
+        text: `얼굴 (${Math.round(f.score * 100)}%)`,
+        box: { x, y, w: Math.min(canvas.width, x1) - x, h: Math.min(canvas.height, y1) - y },
       }
     })
   } catch (err) {
