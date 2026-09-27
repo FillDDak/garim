@@ -58,3 +58,10 @@ describe('unionQuad', () => {
     expect(unionQuad(a, b)).toBeNull()
   })
 })
+
+describe('unionQuad across lines', () => {
+  it('never joins boxes on different text lines', () => {
+    expect(unionQuad({ x: 0, y: 0, w: 200, h: 20 }, { x: 50, y: 12, w: 100, h: 20 })).toBeNull()
+    expect(unionQuad({ x: 0, y: 0, w: 200, h: 20 }, { x: 150, y: 2, w: 100, h: 20 })).not.toBeNull()
+  })
+})

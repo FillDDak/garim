@@ -745,7 +745,7 @@ function addDetection(list: Detection[], d: Detection) {
         return
       }
       // the same text seen from two views, one reaching further: one box over both
-      const u = x.type !== 'face' && d.type !== 'face' ? unionQuad(x.box, d.box) : null
+      const u = x.type !== 'face' && d.type !== 'face' && (x.type === d.type || generic(x) || generic(d)) ? unionQuad(x.box, d.box) : null
       if (u) {
         list[i] = withType({ ...x, box: u }, x)
         return
@@ -780,7 +780,7 @@ const cornersOf = (b: OcrBox): Array<[number, number]> =>
 export function covers(outer: OcrBox, inner: OcrBox): boolean {
   const poly = cornersOf(outer)
   const side = Math.min(...poly.map((p, i) => Math.hypot(p[0] - poly[(i + 1) % 4][0], p[1] - poly[(i + 1) % 4][1])))
-  const tol = side * 0.12
+  const tol = side * 0.3
   return cornersOf(inner).every((p) => pointInPoly(p, poly) || poly.some((a, i) => segDist(p, a, poly[(i + 1) % 4]) <= tol))
 }
 
@@ -801,19 +801,20 @@ export function unionQuad(a: OcrBox, b: OcrBox): OcrBox | null {
   const det = cross(u, v)
   if (Math.abs(det) < 1e-9) return null
   // coordinates of every corner in the (u, v) frame
-  let s0 = Infinity
-  let s1 = -Infinity
-  let t0 = Infinity
-  let t1 = -Infinity
-  for (const [px, py] of [...A, ...B]) {
-    const d: [number, number] = [px - o[0], py - o[1]]
-    const s = cross(d, v) / det
-    const t = cross(u, d) / det
-    s0 = Math.min(s0, s)
-    s1 = Math.max(s1, s)
-    t0 = Math.min(t0, t)
-    t1 = Math.max(t1, t)
+  const frame = (pts: Array<[number, number]>) => {
+    const ss = pts.map(([px, py]) => cross([px - o[0], py - o[1]], v) / det)
+    const ts = pts.map(([px, py]) => cross(u, [px - o[0], py - o[1]]) / det)
+    return { s0: Math.min(...ss), s1: Math.max(...ss), t0: Math.min(...ts), t1: Math.max(...ts) }
   }
+  const fa = frame(A)
+  const fb = frame(B)
+  // only boxes on the same text line: their vertical extents must largely coincide
+  const common = Math.min(fa.t1, fb.t1) - Math.max(fa.t0, fb.t0)
+  if (common < 0.6 * Math.min(fa.t1 - fa.t0, fb.t1 - fb.t0)) return null
+  const s0 = Math.min(fa.s0, fb.s0)
+  const s1 = Math.max(fa.s1, fb.s1)
+  const t0 = Math.min(fa.t0, fb.t0)
+  const t1 = Math.max(fa.t1, fb.t1)
   const at = (s: number, t: number): [number, number] => [o[0] + s * u[0] + t * v[0], o[1] + s * u[1] + t * v[1]]
   const quad = [at(s0, t0), at(s1, t0), at(s1, t1), at(s0, t1)]
   const xs = quad.map((p) => p[0])
