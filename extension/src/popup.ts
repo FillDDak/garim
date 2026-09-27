@@ -25,5 +25,38 @@ $('clear').addEventListener('click', async () => {
   await clearMappings()
   await render()
 })
+/** Is the extension active on the current tab? Tabs opened before install/update need a reload. */
+async function checkTab() {
+  const el = $('tab')
+  const [tab] = (await chrome.tabs?.query({ active: true, currentWindow: true })) ?? []
+  if (!tab?.id || !tab.url) return
+  const patterns = (chrome.runtime.getManifest().content_scripts ?? []).flatMap((c) => c.matches ?? [])
+  const supported = patterns.some((p) => new RegExp('^' + p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$').test(tab.url!))
+  el.classList.remove('hidden')
+  if (!supported) {
+    el.className = 'tab off'
+    $('tabText').textContent = '이 사이트는 자동 가림 대상이 아니에요 (ChatGPT·Claude·Gemini 등에서 동작)'
+    return
+  }
+  const ok = await chrome.tabs!.sendMessage(tab.id, { type: 'garim:ping' }).then(
+    (r) => Boolean((r as { ok?: boolean } | undefined)?.ok),
+    () => false,
+  )
+  if (ok) {
+    el.className = 'tab ok'
+    $('tabText').textContent = '✓ 이 탭에서 동작 중이에요'
+    return
+  }
+  el.className = 'tab warn'
+  $('tabText').textContent = '이 탭은 새로고침해야 가림이 동작해요'
+  const btn = $('reload')
+  btn.classList.remove('hidden')
+  btn.addEventListener('click', async () => {
+    await chrome.tabs!.reload(tab.id!)
+    window.close()
+  })
+}
+
 $('open').addEventListener('click', () => chrome.tabs?.create({ url: 'https://fillddak.github.io/what/' }))
 void render()
+void checkTab()

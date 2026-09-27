@@ -269,6 +269,11 @@ document.addEventListener('copy', (e) => {
   }
 })
 
+// The popup asks whether this tab has the script (tabs opened before install/update do not)
+chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
+  if ((msg as { type?: string } | null)?.type === 'garim:ping') reply({ ok: true })
+})
+
 // ─── Boot ──────────────────────────────────────────────────────────────────
 async function boot() {
   settings = await getSettings()

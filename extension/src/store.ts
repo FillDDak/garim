@@ -15,8 +15,12 @@ declare global {
       create: (o: { url: string }) => void
       query: (q: { active: boolean; currentWindow: boolean }) => Promise<Array<{ id?: number; url?: string }>>
       sendMessage: (id: number, msg: unknown) => Promise<unknown>
+      reload: (id: number) => Promise<void>
     }
-    runtime: { onMessage: { addListener: (cb: (msg: unknown, sender: unknown, reply: (r: unknown) => void) => void) => void } }
+    runtime: {
+      onMessage: { addListener: (cb: (msg: unknown, sender: unknown, reply: (r: unknown) => void) => void) => void }
+      getManifest: () => { content_scripts?: Array<{ matches?: string[] }> }
+    }
   }
 }
 

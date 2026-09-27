@@ -166,6 +166,7 @@ export function GuideView({ go }: { go: (route: string) => void }) {
                 </span>
               </li>
               <li>오른쪽 위 <b>개발자 모드</b>를 켜고 <b>압축해제된 확장 프로그램을 로드</b> → 풀어 둔 폴더를 선택합니다.</li>
+              <li>이미 열려 있던 ChatGPT·Gemini 등의 탭은 <b>새로고침</b>해야 동작해요. (확장 아이콘을 누르면 이 탭에서 동작 중인지 알려 줘요)</li>
             </ol>
             <a className="btn btn-primary btn-lg" href="garim-extension.zip" download>
               <Puzzle size={17} />

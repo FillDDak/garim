@@ -65,6 +65,7 @@ AI 답변: [이름_1] 과장님께 보낼 메일 초안입니다 …
 1. [사이트](https://fillddak.github.io/what/#/guide)에서 `확장 프로그램 받기`로 zip을 받아 압축을 풉니다. (직접 빌드: `npm run build:extension` → `extension/dist`)
 2. `chrome://extensions` · `edge://extensions` · `whale://extensions` 를 엽니다.
 3. **개발자 모드**를 켜고 **압축해제된 확장 프로그램을 로드**에서 폴더를 선택합니다.
+4. 이미 열려 있던 AI 사이트 탭은 새로고침해야 동작합니다. (확장 아이콘 팝업에서 현재 탭의 동작 여부를 확인할 수 있어요)
 
 ## 개인정보는 어디로도 가지 않습니다
 
