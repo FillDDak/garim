@@ -1924,6 +1924,47 @@ input[type='checkbox'] {
   padding: 1px 6px;
   border-radius: 6px;
 }
+.ext-page-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.ext-page-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.ext-page-link:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.ext-page-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ext-page-link.current {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+}
+.ext-page-link code {
+  background: transparent !important;
+  padding: 0 !important;
+  color: var(--accent);
+}
+.ext-page-now {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+}
 .ext-demo {
   display: flex;
   flex-direction: column;

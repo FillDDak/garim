@@ -1,6 +1,8 @@
-import { Bot, ClipboardCheck, Puzzle, FileLock2, ImageOff, KeyRound, Lock, PlaneTakeoff, ScanSearch, Undo2, WifiOff } from 'lucide-react'
+import { Bot, ClipboardCheck, Copy, Puzzle, FileLock2, ImageOff, KeyRound, Lock, PlaneTakeoff, ScanSearch, Undo2, WifiOff } from 'lucide-react'
 import { Card } from '../components/ui'
 import { GithubMark } from '../components/Logo'
+import { useApp } from '../state/AppState'
+import { copyText } from '../lib/clipboard'
 
 const REPO = 'https://github.com/FillDDak/what'
 
@@ -45,6 +47,42 @@ const FAQ: Array<[string, React.ReactNode]> = [
     </>,
   ],
 ]
+
+const EXT_PAGES = [
+  { name: '크롬', url: 'chrome://extensions', ua: null },
+  { name: '엣지', url: 'edge://extensions', ua: /Edg\// },
+  { name: '웨일', url: 'whale://extensions', ua: /Whale\// },
+] as const
+
+/** The extensions page of the browser this page is open in. */
+function currentBrowserUrl(): string {
+  const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent
+  return EXT_PAGES.find((p) => p.ua?.test(ua))?.url ?? 'chrome://extensions'
+}
+
+/**
+ * Browsers refuse to open chrome:// / edge:// / whale:// pages from a web link, so a click copies
+ * the address for the address bar instead.
+ */
+function ExtPageLink({ name, url, current }: { name: string; url: string; current: boolean }) {
+  const { toast } = useApp()
+  return (
+    <a
+      href={url}
+      className={`ext-page-link ${current ? 'current' : ''}`}
+      title="클릭하면 주소가 복사돼요"
+      onClick={async (e) => {
+        e.preventDefault()
+        const ok = await copyText(url)
+        toast(ok ? `${url} 주소를 복사했어요. 새 탭 주소창에 붙여넣고 Enter를 누르세요` : `${url} 을 주소창에 직접 입력해 주세요`, ok ? 'success' : 'warn')
+      }}
+    >
+      {name} <code>{url}</code>
+      <Copy size={12} aria-hidden="true" />
+      {current && <span className="ext-page-now">지금 브라우저</span>}
+    </a>
+  )
+}
 
 export function GuideView({ go }: { go: (route: string) => void }) {
   return (
@@ -120,7 +158,12 @@ export function GuideView({ go }: { go: (route: string) => void }) {
             <ol>
               <li>아래 버튼으로 파일을 받아 압축을 풉니다.</li>
               <li>
-                크롬은 <code>chrome://extensions</code>, 엣지는 <code>edge://extensions</code>, 웨일은 <code>whale://extensions</code>를 주소창에 입력합니다.
+                브라우저의 확장 프로그램 페이지를 엽니다. 아래 주소를 누르면 복사되니 새 탭 주소창에 붙여넣으세요.
+                <span className="ext-page-links">
+                  {EXT_PAGES.map((p) => (
+                    <ExtPageLink key={p.url} name={p.name} url={p.url} current={p.url === currentBrowserUrl()} />
+                  ))}
+                </span>
               </li>
               <li>오른쪽 위 <b>개발자 모드</b>를 켜고 <b>압축해제된 확장 프로그램을 로드</b> → 풀어 둔 폴더를 선택합니다.</li>
             </ol>
