@@ -205,7 +205,10 @@ async function recognizeView(
         const card = extrapolateCardNumber(lin.glyphs, text, e.start, e.end)
         if (card) found.push({ id: `${e.id}:card`, type: 'card', text: `${e.value.trim()} (카드번호 추정)`, box: card })
         // the holder's name sits above an unspaced ID number (student/employee no.), not a card number
-        if (idDoc && /^\d{6,12}$/.test(e.value.trim())) {
+        const lineStart = text.lastIndexOf('\n', e.start - 1) + 1
+        const lineEnd = text.indexOf('\n', e.end)
+        const lineDigits = text.slice(lineStart, lineEnd < 0 ? text.length : lineEnd).replace(/\D/g, '').length
+        if (idDoc && /^\d{6,12}$/.test(e.value.trim()) && lineDigits <= 12 && !hasGroupGaps(lin.glyphs, e.start, e.end)) {
           const above = lineAbove(lin.glyphs, text, e.start, e.end)
           if (above) found.push({ id: `${e.id}:above`, type: 'name', text: /[가-힣]{2,}/.test(above.text) ? `${above.text} (번호 위 줄)` : '이름으로 보이는 줄 (번호 바로 위)', box: above.box })
         }
@@ -235,10 +238,28 @@ async function recognizeView(
     enhanced.width = enhanced.height = 0
   }
 
+  // Snap every text box to the ink actually present in the image, so redactions are as tight as
+  // the text (OCR glyph boxes are loose and sometimes wildly off)
+  const gray = grayOf(input)
+  for (const d of detections) {
+    if (d.type === 'face' || d.type === 'qr') continue
+    const before = d.box
+    d.box = tightenToInk(gray, input.width, input.height, d.box)
+    debugLog(`TIGHT ${d.type} ${d.text} ${JSON.stringify([before.x, before.y, before.w, before.h].map(Math.round))} -> ${JSON.stringify([d.box.x, d.box.y, d.box.w, d.box.h].map(Math.round))} scale=${scale.toFixed(2)} in=${input.width}x${input.height}`)
+  }
+
+  // drop slivers: a box far thinner than the other text boxes is a misaligned OCR fragment
+  const textH = median(detections.filter((d) => d.type !== 'face' && d.type !== 'qr').map((d) => d.box.h))
+  for (let i = detections.length - 1; i >= 0; i--) {
+    const d = detections[i]
+    if (d.type === 'face' || d.type === 'qr') continue
+    if (d.box.h < Math.max(4, textH * 0.35)) detections.splice(i, 1)
+  }
+
   // back to source coordinates + padding; boxes found on a straightened/flattened copy become
   // quadrilaterals that follow the text in the original photo
   for (const d of detections) {
-    const pad = Math.max(2, d.box.h * 0.18)
+    const pad = Math.max(1.5, d.box.h * 0.08)
     const x0 = (d.box.x - pad) / scale
     const y0 = (d.box.y - pad) / scale
     const x1 = (d.box.x + d.box.w + pad) / scale
@@ -433,7 +454,14 @@ function linearize(blocks: TBlock[], gapRatio: number): { text: string; glyphs: 
             const glue = /[-.@_/]$/.test(prev.text) || /^[-.@_/]/.test(wt)
             if (!glue && gap > lineH * gapRatio) push(' ', null)
           }
-          if (word.symbols?.length) for (const sym of word.symbols) push(sym.text, { ch: sym.text, bbox: sym.bbox })
+          // LSTM symbol boxes are fine horizontally but often drift vertically: take the height
+          // from the word box, which Tesseract measures reliably
+          if (word.symbols?.length)
+            for (const sym of word.symbols) {
+              const x0 = Math.max(word.bbox.x0, Math.min(sym.bbox.x0, word.bbox.x1))
+              const x1 = Math.max(x0 + 1, Math.min(sym.bbox.x1, word.bbox.x1))
+              push(sym.text, { ch: sym.text, bbox: { x0, x1, y0: word.bbox.y0, y1: word.bbox.y1 } })
+            }
           else push(wt, { ch: wt, bbox: word.bbox })
           prev = { text: wt, x1: word.bbox.x1 }
         }
@@ -449,32 +477,57 @@ function linearize(blocks: TBlock[], gapRatio: number): { text: string; glyphs: 
 function boxesFor(entities: Entity[], glyphs: Array<Glyph | null>): Detection[] {
   const out: Detection[] = []
   for (const e of entities) {
-    let cur: OcrBox | null = null
-    const flush = () => {
-      if (cur) out.push({ id: `${e.id}:${out.length}`, type: e.type, text: e.value, box: cur, entityId: e.id, label: e.label })
-      cur = null
-    }
+    // split the entity's glyphs into visual lines
+    const lines: GBox[][] = []
+    let cur: GBox[] = []
+    let ref: GBox | null = null
     for (let i = e.start; i < e.end; i++) {
       const g = glyphs[i]
       if (!g) continue
       const b = g.bbox
-      // start a new rectangle when the entity wraps onto another visual line
       const cy = (b.y0 + b.y1) / 2
-      if (cur && (cy < cur.y - cur.h * 0.2 || cy > cur.y + cur.h * 1.2 || b.x0 < cur.x - cur.h)) flush()
-      if (!cur) cur = { x: b.x0, y: b.y0, w: b.x1 - b.x0, h: b.y1 - b.y0 }
-      else {
-        const c: OcrBox = cur
-        const x1 = Math.max(c.x + c.w, b.x1)
-        const y1 = Math.max(c.y + c.h, b.y1)
-        c.x = Math.min(c.x, b.x0)
-        c.y = Math.min(c.y, b.y0)
-        c.w = x1 - c.x
-        c.h = y1 - c.y
+      if (ref) {
+        const rh = ref.y1 - ref.y0
+        if (cy < ref.y0 - rh * 0.2 || cy > ref.y1 + rh * 0.2 || b.x0 < ref.x0 - rh) {
+          lines.push(cur)
+          cur = []
+        }
       }
+      cur.push(b)
+      ref = b
     }
-    flush()
+    if (cur.length) lines.push(cur)
+    for (const line of lines) {
+      const box = robustBounds(line)
+      if (box) out.push({ id: `${e.id}:${out.length}`, type: e.type, text: e.value, box, entityId: e.id, label: e.label })
+    }
   }
   return out
+}
+
+/**
+ * Bounds of a line of glyphs ignoring OCR outliers: a misread glyph often comes back with a box
+ * two or three lines tall, which used to stretch the whole redaction.
+ */
+function robustBounds(line: GBox[]): OcrBox | null {
+  if (!line.length) return null
+  const hs = line.map((b) => b.y1 - b.y0)
+  const hMed = median(hs)
+  const cyMed = median(line.map((b) => (b.y0 + b.y1) / 2))
+  let kept = line.filter((b) => {
+    const h = b.y1 - b.y0
+    const cy = (b.y0 + b.y1) / 2
+    return h <= hMed * 1.7 && Math.abs(cy - cyMed) <= hMed * 0.6
+  })
+  if (!kept.length) kept = line
+  // punctuation (-, ., ,) has tiny boxes: it may extend the width but not define the height
+  const tall = kept.filter((b) => b.y1 - b.y0 >= hMed * 0.45)
+  const vert = tall.length ? tall : kept
+  const x0 = Math.min(...kept.map((b) => b.x0))
+  const x1 = Math.max(...kept.map((b) => b.x1))
+  const y0 = Math.min(...vert.map((b) => b.y0))
+  const y1 = Math.max(...vert.map((b) => b.y1))
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
 }
 
 /** Intersection over the smaller box. */
@@ -492,6 +545,15 @@ function glyphsIn(glyphs: Array<Glyph | null>, start: number, end: number): GBox
   const out: GBox[] = []
   for (let i = start; i < end; i++) if (glyphs[i]) out.push(glyphs[i]!.bbox)
   return out
+}
+
+/** True when the digits are printed in spaced groups (card numbers), judged from glyph positions. */
+function hasGroupGaps(glyphs: Array<Glyph | null>, start: number, end: number): boolean {
+  const own = glyphsIn(glyphs, start, end).sort((a, b) => a.x0 - b.x0)
+  if (own.length < 2) return false
+  const h = median(own.map((b) => b.y1 - b.y0))
+  for (let i = 1; i < own.length; i++) if (own[i].x0 - own[i - 1].x1 > h * 0.45) return true
+  return false
 }
 
 const median = (xs: number[]) => {
@@ -610,6 +672,18 @@ function addDetection(list: Detection[], d: Detection) {
       const bigger = area(d.box) > area(x.box) * 1.15 && !x.box.quad && !d.box.quad
       // keep the larger box, and the more specific type (계좌번호 beats a generic "번호")
       const keep = bigger ? { ...d } : { ...x }
+      if (!x.box.quad && !d.box.quad && x.type !== 'face' && d.type !== 'face') {
+        // same text found twice: cover both horizontally, but keep the tighter vertical extent
+        const a = x.box
+        const b = d.box
+        const xl = Math.min(a.x, b.x)
+        const xr = Math.max(a.x + a.w, b.x + b.w)
+        const yt = Math.max(a.y, b.y)
+        const yb = Math.min(a.y + a.h, b.y + b.h)
+        const tighter = a.h <= b.h ? a : b
+        const box = yb - yt >= tighter.h * 0.7 ? { x: xl, y: yt, w: xr - xl, h: yb - yt } : { x: xl, y: tighter.y, w: xr - xl, h: tighter.h }
+        keep.box = box
+      }
       if (generic(keep) && (!generic(x) || !generic(d))) {
         const specific = generic(x) ? d : x
         keep.type = specific.type
@@ -621,4 +695,158 @@ function addDetection(list: Detection[], d: Detection) {
     }
   }
   list.push(d)
+}
+
+/** Ink-oriented grayscale copy of a canvas (0–255). */
+function grayOf(canvas: HTMLCanvasElement): Uint8Array {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const g = new Uint8Array(canvas.width * canvas.height)
+  // brightest channel: black print stays dark, coloured artwork (arcs, stamps, highlights) turns light
+  for (let i = 0; i < g.length; i++) g[i] = Math.max(data[i * 4], data[i * 4 + 1], data[i * 4 + 2])
+  return g
+}
+
+/**
+ * Shrinks (or slightly grows) a text box to the ink inside it: rows and columns are kept while
+ * they contain text pixels, starting from the box core, so neighbouring lines, table rules and
+ * empty padding are excluded while no glyph pixel is left uncovered.
+ */
+export function tightenToInk(gray: Uint8Array, W: number, H: number, box: OcrBox): OcrBox {
+  const h0 = Math.max(4, box.h)
+  const m = Math.round(h0 * 0.35)
+  const bx0 = Math.max(0, Math.floor(box.x))
+  const by0 = Math.max(0, Math.floor(box.y))
+  const bx1 = Math.min(W, Math.ceil(box.x + box.w))
+  const by1 = Math.min(H, Math.ceil(box.y + box.h))
+  if (bx1 - bx0 < 3 || by1 - by0 < 3) return box
+  const rx0 = Math.max(0, bx0 - m)
+  const ry0 = Math.max(0, by0 - m)
+  const rx1 = Math.min(W, bx1 + m)
+  const ry1 = Math.min(H, by1 + m)
+
+  // Otsu threshold inside the box; the minority class is the ink (dark text or light text)
+  const hist = new Uint32Array(256)
+  let n = 0
+  for (let y = by0; y < by1; y++) for (let x = bx0; x < bx1; x++) {
+    hist[gray[y * W + x]]++
+    n++
+  }
+  let sum = 0
+  for (let i = 0; i < 256; i++) sum += i * hist[i]
+  let sumB = 0
+  let wB = 0
+  let best = 0
+  let t = 127
+  for (let i = 0; i < 256; i++) {
+    wB += hist[i]
+    if (!wB) continue
+    const wF = n - wB
+    if (!wF) break
+    sumB += i * hist[i]
+    const mB = sumB / wB
+    const mF = (sum - sumB) / wF
+    const between = wB * wF * (mB - mF) ** 2
+    if (between > best) {
+      best = between
+      t = i
+    }
+  }
+  let dark = 0
+  for (let i = 0; i <= t; i++) dark += hist[i]
+  const inkIsDark = dark <= n / 2
+  // too little contrast to say anything: keep the OCR box
+  let lo = 0
+  let hi = 0
+  for (let i = 0; i < 256; i++) if (hist[i]) { lo = i; break }
+  for (let i = 255; i >= 0; i--) if (hist[i]) { hi = i; break }
+  if (hi - lo < 40) return box
+  const isInk = (v: number) => (inkIsDark ? v <= t : v > t)
+
+  // row profile over the box's columns
+  const rows = new Float32Array(ry1 - ry0)
+  for (let y = ry0; y < ry1; y++) {
+    let c = 0
+    for (let x = bx0; x < bx1; x++) if (isInk(gray[y * W + x])) c++
+    rows[y - ry0] = c / (bx1 - bx0)
+  }
+  // a row belongs to the text if it carries a fair share of the densest text row's ink (thin
+  // background artwork crossing the box only adds a little) and is not a solid rule/band
+  let peak = 0
+  for (let y = by0 - ry0; y < by1 - ry0; y++) if (rows[y] < 0.9 && rows[y] > peak) peak = rows[y]
+  const floor = Math.max(0.015, peak * 0.22)
+  const inked = (r: number) => r >= floor && r < 0.9
+  // seed at the inked row closest to the OCR box centre (OCR gets the centre right even when
+  // its box is too tall), then grow while rows stay inked – but never far outside the box
+  const cy = Math.round((by0 + by1) / 2) - ry0
+  let seed = -1
+  for (let d = 0; d <= (by1 - by0) / 2; d++) {
+    if (cy - d >= 0 && inked(rows[cy - d])) {
+      seed = cy - d
+      break
+    }
+    if (cy + d < rows.length && inked(rows[cy + d])) {
+      seed = cy + d
+      break
+    }
+  }
+  if (seed < 0) return box
+  const gap = Math.max(1, Math.round(h0 * 0.12))
+  const minTop = Math.max(0, by0 - ry0 - Math.round(h0 * 0.12))
+  const maxBottom = Math.min(rows.length - 1, by1 - ry0 - 1 + Math.round(h0 * 0.12))
+  let top = seed
+  let bottom = seed
+  for (let y = seed, miss = 0; y >= minTop && miss <= gap; y--) {
+    if (inked(rows[y])) {
+      top = y
+      miss = 0
+    } else miss++
+  }
+  for (let y = seed, miss = 0; y <= maxBottom && miss <= gap; y++) {
+    if (inked(rows[y])) {
+      bottom = y
+      miss = 0
+    } else miss++
+  }
+  // the result must still contain the middle of the OCR box: never slide off the text
+  const core0 = cy - Math.round(h0 * 0.15)
+  const core1 = cy + Math.round(h0 * 0.15)
+  top = Math.min(top, Math.max(0, core0))
+  bottom = Math.max(bottom, Math.min(rows.length - 1, core1))
+  const ty0 = ry0 + top
+  const ty1 = ry0 + bottom + 1
+  if (ty1 - ty0 < h0 * 0.3) return box
+
+  // column profile inside the text band
+  const cols = new Uint16Array(rx1 - rx0)
+  for (let x = rx0; x < rx1; x++) {
+    let c = 0
+    for (let y = ty0; y < ty1; y++) if (isInk(gray[y * W + x])) c++
+    cols[x - rx0] = c
+  }
+  const colInked = (x: number) => cols[x] > 0 && cols[x] < (ty1 - ty0) * 0.95
+  // first/last inked columns inside the original box, then extend through touching ink
+  let left = -1
+  let right = -1
+  for (let x = bx0 - rx0; x < bx1 - rx0; x++) if (colInked(x)) {
+    if (left < 0) left = x
+    right = x
+  }
+  if (left < 0) return box
+  const cgap = Math.max(1, Math.round(h0 * 0.25))
+  const minLeft = Math.max(0, bx0 - rx0 - Math.round(h0 * 0.3))
+  const maxRight = Math.min(cols.length - 1, bx1 - rx0 - 1 + Math.round(h0 * 0.3))
+  for (let x = left - 1, miss = 0; x >= minLeft && miss <= cgap; x--) {
+    if (colInked(x)) {
+      left = x
+      miss = 0
+    } else miss++
+  }
+  for (let x = right + 1, miss = 0; x <= maxRight && miss <= cgap; x++) {
+    if (colInked(x)) {
+      right = x
+      miss = 0
+    } else miss++
+  }
+  return { x: rx0 + left, y: ty0, w: right - left + 1, h: ty1 - ty0 }
 }

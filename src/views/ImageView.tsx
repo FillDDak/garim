@@ -17,7 +17,7 @@ import JSZip from 'jszip'
 import { TYPE_META } from '../core/labels'
 import { Button, Card, CardHeader, Empty, Segmented } from '../components/ui'
 import { useApp } from '../state/AppState'
-import { barcodeSupported, detectCodes, detectInImage, type Detection, type OcrProgress } from '../lib/ocr'
+import { barcodeSupported, detectCodes, detectInImage, type Detection, type OcrBox, type OcrProgress } from '../lib/ocr'
 import { canvasToBlob, loadImageToCanvas, paintRedaction, type RedactStyle } from '../lib/redact'
 import { downloadBlob } from '../lib/clipboard'
 import { newId } from '../lib/sessions'
@@ -44,6 +44,30 @@ const STYLE_OPTIONS: Array<{ value: RedactStyle; label: string; hint: string }> 
 const groupOf = (d: Detection) => (d.type === 'qr' ? 'tech' : d.type === 'face' ? 'person' : TYPE_META[d.type].group)
 const typeName = (d: Detection) => (d.type === 'qr' ? 'QR·바코드' : d.type === 'face' ? '얼굴' : d.type === 'custom' ? d.label ?? '직접 지정' : TYPE_META[d.type].name)
 
+type EditMode = 'move' | 'nw' | 'ne' | 'sw' | 'se'
+const HANDLES: EditMode[] = ['nw', 'ne', 'sw', 'se']
+
+/** Applies a pointer delta (image pixels) to a box for a move or a corner resize. */
+function editBox(orig: OcrBox, mode: EditMode, dx: number, dy: number, W: number, H: number): OcrBox {
+  if (mode === 'move') {
+    const nx = Math.max(0, Math.min(W - orig.w, orig.x + dx))
+    const ny = Math.max(0, Math.min(H - orig.h, orig.y + dy))
+    const ox = nx - orig.x
+    const oy = ny - orig.y
+    return { ...orig, x: nx, y: ny, quad: orig.quad?.map(([x, y]) => [x + ox, y + oy] as [number, number]) }
+  }
+  const min = Math.max(4, W / 400)
+  let x0 = orig.x
+  let y0 = orig.y
+  let x1 = orig.x + orig.w
+  let y1 = orig.y + orig.h
+  if (mode === 'nw' || mode === 'sw') x0 = Math.max(0, Math.min(x1 - min, x0 + dx))
+  else x1 = Math.min(W, Math.max(x0 + min, x1 + dx))
+  if (mode === 'nw' || mode === 'ne') y0 = Math.max(0, Math.min(y1 - min, y0 + dy))
+  else y1 = Math.min(H, Math.max(y0 + min, y1 + dy))
+  return { ...orig, x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
+}
+
 function baseName(name: string) {
   return name.replace(/\.[^.]+$/, '') || 'image'
 }
@@ -55,6 +79,8 @@ export function ImageView() {
   const [progress, setProgress] = useState<OcrProgress | null>(null)
   const [drag, setDrag] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
   const [hover, setHover] = useState<string | null>(null)
+  const [selected, setSelected] = useState<string | null>(null)
+  const editRef = useRef<{ id: string; mode: EditMode; px: number; py: number; orig: OcrBox; moved: boolean } | null>(null)
   const [dropping, setDropping] = useState(false)
   const previewRef = useRef<HTMLCanvasElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
@@ -174,17 +200,48 @@ export function ImageView() {
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (!active || e.button !== 0) return
-    if ((e.target as HTMLElement).closest('.img-box')) return
+    const target = e.target as HTMLElement
+    if (target.closest('.img-box-x')) return
+    const boxEl = target.closest<HTMLElement>('.img-box[data-id]')
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     const p = toImageCoords(e.clientX, e.clientY)
+    if (boxEl) {
+      const b = active.boxes.find((x) => x.id === boxEl.dataset.id)
+      if (!b) return
+      const handle = target.closest<HTMLElement>('.img-box-h')?.dataset.h as EditMode | undefined
+      editRef.current = { id: b.id, mode: handle ?? 'move', px: p.x, py: p.y, orig: b.box, moved: false }
+      setSelected(b.id)
+      return
+    }
+    setSelected(null)
     setDrag({ x0: p.x, y0: p.y, x1: p.x, y1: p.y })
   }
   const onPointerMove = (e: React.PointerEvent) => {
+    const ed = editRef.current
+    if (ed && active) {
+      const p = toImageCoords(e.clientX, e.clientY)
+      const dx = p.x - ed.px
+      const dy = p.y - ed.py
+      // a few screen pixels of jitter still count as a click
+      const r = stageRef.current?.getBoundingClientRect()
+      const slop = r ? (4 * active.source.width) / r.width : 4
+      if (!ed.moved && Math.hypot(dx, dy) < slop) return
+      ed.moved = true
+      const box = editBox(ed.orig, ed.mode, dx, dy, active.source.width, active.source.height)
+      update(active.id, (it) => ({ ...it, boxes: it.boxes.map((b) => (b.id === ed.id ? { ...b, box } : b)) }))
+      return
+    }
     if (!drag) return
     const p = toImageCoords(e.clientX, e.clientY)
     setDrag({ ...drag, x1: p.x, y1: p.y })
   }
   const onPointerUp = () => {
+    const ed = editRef.current
+    if (ed) {
+      editRef.current = null
+      if (!ed.moved && ed.mode === 'move') toggleBox(ed.id)
+      return
+    }
     if (!drag || !active) return
     const x = Math.min(drag.x0, drag.x1)
     const y = Math.min(drag.y0, drag.y1)
@@ -193,10 +250,18 @@ export function ImageView() {
     setDrag(null)
     const minSide = Math.max(4, active.source.width / 300)
     if (w < minSide || h < minSide) return
+    const id = `manual:${newId()}`
     update(active.id, (it) => ({
       ...it,
-      boxes: [...it.boxes, { id: `manual:${newId()}`, type: 'custom', label: '직접 지정', text: '직접 그린 영역', box: { x, y, w, h } }],
+      boxes: [...it.boxes, { id, type: 'custom', label: '직접 지정', text: '직접 그린 영역', box: { x, y, w, h } }],
     }))
+    setSelected(id)
+  }
+  const onPointerCancel = () => {
+    const ed = editRef.current
+    if (ed && active) update(active.id, (it) => ({ ...it, boxes: it.boxes.map((b) => (b.id === ed.id ? { ...b, box: ed.orig } : b)) }))
+    editRef.current = null
+    setDrag(null)
   }
 
   const toggleBox = (id: string) => {
@@ -211,7 +276,35 @@ export function ImageView() {
   const removeBox = (id: string) => {
     if (!active) return
     update(active.id, (it) => ({ ...it, boxes: it.boxes.filter((b) => b.id !== id) }))
+    if (selected === id) setSelected(null)
   }
+
+  // keyboard: Delete removes the selected box, arrows nudge it (Shift = 10px), Esc deselects
+  useEffect(() => {
+    if (!selected || !active) return
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      const b = active.boxes.find((x) => x.id === selected)
+      if (!b) return
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault()
+        removeBox(b.id)
+      } else if (e.key === 'Escape') {
+        setSelected(null)
+      } else if (e.key.startsWith('Arrow')) {
+        e.preventDefault()
+        const step = (e.shiftKey ? 10 : 1) * Math.max(1, active.source.width / 1000)
+        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0
+        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
+        // Alt + arrows resize from the bottom-right corner instead of moving
+        const box = editBox(b.box, e.altKey ? 'se' : 'move', dx, dy, active.source.width, active.source.height)
+        update(active.id, (it) => ({ ...it, boxes: it.boxes.map((x) => (x.id === b.id ? { ...x, box } : x)) }))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   const exportBlob = async (item: ImageItem) => {
     const c = document.createElement('canvas')
@@ -311,7 +404,7 @@ export function ImageView() {
                   ? progress
                     ? `${progress.status} ${Math.round(progress.progress * 100)}%`
                     : '글자 인식 준비 중…'
-                  : '가릴 곳을 드래그해 추가 · 박스를 누르면 켜고 끌 수 있어요'
+                  : '빈 곳을 드래그해 추가 · 박스를 끌어 이동, 모서리로 크기 조절 · 누르면 켜고 끄기'
               }
               icon={scanning ? <Loader2 size={18} className="spin" /> : <MousePointerSquareDashed size={18} />}
               actions={
@@ -339,7 +432,7 @@ export function ImageView() {
                   onPointerDown={onPointerDown}
                   onPointerMove={onPointerMove}
                   onPointerUp={onPointerUp}
-                  onPointerCancel={() => setDrag(null)}
+                  onPointerCancel={onPointerCancel}
                 >
                   <canvas ref={previewRef} className="stage-canvas" />
                   {scanning && <div className="scanline" />}
@@ -352,7 +445,8 @@ export function ImageView() {
                     return (
                       <div
                         key={b.id}
-                        className={`img-box g-${groupOf(b)} ${poly ? 'quad' : ''} ${off ? 'off' : ''} ${hover === b.id ? 'hover' : ''}`}
+                        data-id={b.id}
+                        className={`img-box g-${groupOf(b)} ${poly ? 'quad' : ''} ${off ? 'off' : ''} ${hover === b.id ? 'hover' : ''} ${selected === b.id ? 'sel' : ''}`}
                         style={{
                           left: `${(b.box.x / W) * 100}%`,
                           top: `${(b.box.y / H) * 100}%`,
@@ -361,10 +455,17 @@ export function ImageView() {
                           transform: b.box.angle && !poly ? `rotate(${b.box.angle}rad)` : undefined,
                           clipPath: poly ? `polygon(${poly.map(([x, y]) => `${x}% ${y}%`).join(', ')})` : undefined,
                         }}
-                        onClick={() => toggleBox(b.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            toggleBox(b.id)
+                          }
+                        }}
+                        onFocus={() => setSelected(b.id)}
+                        tabIndex={0}
                         onMouseEnter={() => setHover(b.id)}
                         onMouseLeave={() => setHover(null)}
-                        title={`${typeName(b)}: ${b.text}${off ? ' (가리지 않음)' : ''}`}
+                        title={`${typeName(b)}: ${b.text}${off ? ' (가리지 않음)' : ''} · 누르면 켜고 끄기, 끌어서 이동${poly ? '' : ', 모서리로 크기 조절'}`}
                         role="button"
                         aria-pressed={!off}
                       >
@@ -373,7 +474,9 @@ export function ImageView() {
                             <polygon points={poly.map(([x, y]) => `${x},${y}`).join(' ')} />
                           </svg>
                         )}
-                        {b.id.startsWith('manual:') && (
+                        {!poly &&
+                          HANDLES.map((h) => <span key={h} className={`img-box-h ${h}`} data-h={h} aria-hidden="true" />)}
+                        {!poly && (
                           <button
                             type="button"
                             className="img-box-x"
@@ -461,11 +564,9 @@ export function ImageView() {
                             <span className="entity-type">{typeName(b)}</span>
                             <span className="entity-value">{b.text}</span>
                           </label>
-                          {b.id.startsWith('manual:') && (
-                            <button type="button" className="icon-btn" onClick={() => removeBox(b.id)} aria-label="삭제">
-                              <Trash2 size={14} />
-                            </button>
-                          )}
+                          <button type="button" className="icon-btn" onClick={() => removeBox(b.id)} aria-label="삭제">
+                            <Trash2 size={14} />
+                          </button>
                         </li>
                       )
                     })}

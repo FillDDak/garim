@@ -37,7 +37,7 @@ export async function detectFaces(canvas: HTMLCanvasElement): Promise<Detection[
       const b = r.box
       const padX = b.width * 0.3
       const padTop = b.height * 0.45
-      const padBottom = b.height * 0.25
+      const padBottom = b.height * 0.4
       const x = Math.max(0, b.x - padX)
       const y = Math.max(0, b.y - padTop)
       const w = Math.min(canvas.width - x, b.width + padX * 2)
