@@ -2188,3 +2188,35 @@ input[type='checkbox'] {
   white-space: pre-wrap;
   margin: 14px 0 18px;
 }
+
+/* perspective-corrected boxes: the div is clipped to the polygon, the svg draws its outline */
+.img-box.quad,
+.img-box.quad:hover,
+.img-box.quad.hover,
+.img-box.quad.off {
+  outline: none;
+  background: transparent;
+}
+.img-box-poly {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.img-box-poly polygon {
+  fill: transparent;
+  stroke: color-mix(in srgb, var(--g, var(--accent)) 80%, transparent);
+  stroke-width: 4;
+  vector-effect: non-scaling-stroke;
+}
+.img-box.quad.hover .img-box-poly polygon,
+.img-box.quad:hover .img-box-poly polygon {
+  fill: color-mix(in srgb, var(--g, var(--accent)) 14%, transparent);
+  stroke-width: 5;
+}
+.img-box.quad.off .img-box-poly polygon {
+  stroke-dasharray: 6 4;
+  fill: color-mix(in srgb, var(--g, var(--accent)) 8%, transparent);
+}

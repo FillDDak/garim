@@ -238,6 +238,8 @@ export function isPlausibleName(word: string, minLen = 3): boolean {
   if (!/^[가-힣]+$/.test(word)) return false
   if (word.length < minLen || word.length > 4) return false
   if (NAME_STOPWORDS.has(word) || LABEL_WORDS.has(word)) return false
+  // organisations and places ("리은행" from an OCR-split "우리은행", "한국병원"…)
+  if (/(은행|증권|카드|보험|병원|학교|회사|센터|마트|공사|청|구청|시청)$/.test(word)) return false
   if (word.length === 4) return COMPOUND_SURNAMES.some((s) => word.startsWith(s))
   return startsWithSurname(word)
 }

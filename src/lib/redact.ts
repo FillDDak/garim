@@ -7,6 +7,8 @@ export interface Rect {
   h: number
   /** Optional rotation (radians, clockwise) around the rectangle centre. */
   angle?: number
+  /** Optional exact polygon (TL, TR, BR, BL); x/y/w/h are then its bounding box. */
+  quad?: Array<[number, number]>
 }
 
 /** Axis-aligned bounds of a (possibly rotated) rectangle. */
@@ -32,6 +34,17 @@ const clampRect = (r: Rect, W: number, H: number): Rect | null => {
 
 /** Paint one redaction onto `ctx` (whose current pixels are the source image). */
 export function paintRedaction(ctx: CanvasRenderingContext2D, rect: Rect, style: RedactStyle) {
+  if (rect.quad) {
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.beginPath()
+    rect.quad.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)))
+    ctx.closePath()
+    ctx.clip()
+    paintRedaction(ctx, { x: rect.x, y: rect.y, w: rect.w, h: rect.h }, style)
+    ctx.restore()
+    return
+  }
   if (rect.angle) {
     // clip to the rotated rectangle, then redact its bounding box
     const cx = rect.x + rect.w / 2

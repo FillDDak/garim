@@ -289,7 +289,7 @@ export function ImageView() {
             <strong>캡처·사진을 끌어다 놓거나, Ctrl+V로 붙여넣으세요</strong>
             <span>카톡 대화, 주문내역, 신분증, 계약서 사진 속 이름·전화번호·주소·계좌번호를 글자 인식(OCR)으로 찾아 가립니다.</span>
             <span className="dz-meta">
-              PNG · JPG · WEBP · 여러 장 가능 · 기울어진 사진은 자동으로 바로 세워 인식 · 처음 한 번 인식 모델(약 5MB)을 받은 뒤에는 오프라인에서도 동작
+              PNG · JPG · WEBP · 여러 장 가능 · 기울어지거나 비스듬히 찍은 사진은 자동으로 펴서 인식 · 처음 한 번 인식 모델(약 5MB)을 받은 뒤에는 오프라인에서도 동작
             </span>
             <span className="dz-meta">사진은 문서를 정면에서, 화면에 꽉 차게 찍을수록 정확해요</span>
             <span className="btn btn-primary btn-md">이미지 선택</span>
@@ -346,11 +346,20 @@ export function ImageView() {
                     const off = active.disabled.has(b.id)
                     const W = active.source.width
                     const H = active.source.height
+                    // perspective / rotated text: exact polygon relative to its bounding box
+                    const poly = b.box.quad?.map(([x, y]) => [((x - b.box.x) / b.box.w) * 100, ((y - b.box.y) / b.box.h) * 100] as const)
                     return (
                       <div
                         key={b.id}
-                        className={`img-box g-${groupOf(b)} ${off ? 'off' : ''} ${hover === b.id ? 'hover' : ''}`}
-                        style={{ left: `${(b.box.x / W) * 100}%`, top: `${(b.box.y / H) * 100}%`, width: `${(b.box.w / W) * 100}%`, height: `${(b.box.h / H) * 100}%`, transform: b.box.angle ? `rotate(${b.box.angle}rad)` : undefined }}
+                        className={`img-box g-${groupOf(b)} ${poly ? 'quad' : ''} ${off ? 'off' : ''} ${hover === b.id ? 'hover' : ''}`}
+                        style={{
+                          left: `${(b.box.x / W) * 100}%`,
+                          top: `${(b.box.y / H) * 100}%`,
+                          width: `${(b.box.w / W) * 100}%`,
+                          height: `${(b.box.h / H) * 100}%`,
+                          transform: b.box.angle && !poly ? `rotate(${b.box.angle}rad)` : undefined,
+                          clipPath: poly ? `polygon(${poly.map(([x, y]) => `${x}% ${y}%`).join(', ')})` : undefined,
+                        }}
                         onClick={() => toggleBox(b.id)}
                         onMouseEnter={() => setHover(b.id)}
                         onMouseLeave={() => setHover(null)}
@@ -358,6 +367,11 @@ export function ImageView() {
                         role="button"
                         aria-pressed={!off}
                       >
+                        {poly && (
+                          <svg className="img-box-poly" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                            <polygon points={poly.map(([x, y]) => `${x},${y}`).join(' ')} />
+                          </svg>
+                        )}
                         {b.id.startsWith('manual:') && (
                           <button
                             type="button"

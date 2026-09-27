@@ -3,6 +3,7 @@ import { detect } from '../core/engine'
 import type { DetectOptions, Entity, EntityType } from '../core/types'
 import { assetUrl } from './assetUrl'
 import { enhanceForOcr, estimateSkew, rotateCanvas } from './deskew'
+import { findDocumentQuad, warpQuad } from './perspective'
 
 
 export interface OcrProgress {
@@ -54,6 +55,8 @@ export interface OcrBox {
   h: number
   /** Rotation (radians, clockwise) around the box centre, for text in tilted photos. */
   angle?: number
+  /** Exact corners (TL, TR, BR, BL) when the text is rotated or in perspective; x/y/w/h are its bounds. */
+  quad?: Array<[number, number]>
 }
 
 export interface Detection {
@@ -82,17 +85,53 @@ export async function detectInImage(
   const worker = await getOcrWorker(onProgress)
   progressListener = onProgress ?? null
 
-  // Photos are rarely straight: Tesseract loses most Korean text beyond ~5° of skew,
-  // so estimate the angle and recognise on a straightened copy.
-  const skew = estimateSkew(source)
-  let work: HTMLCanvasElement = source
-  let toSource = (x: number, y: number): [number, number] => [x, y]
-  if (Math.abs(skew) >= 1) {
-    const r = rotateCanvas(source, skew)
-    work = r.canvas
-    toSource = r.toSource
+  // Photos are rarely flat: undo the perspective of a photographed sheet, then any remaining
+  // rotation (Tesseract loses most Korean text beyond ~5° of skew). The whole image is always
+  // recognised as well, so text outside a detected sheet is never skipped.
+  const views: View[] = []
+  const quad = findDocumentQuad(source)
+  if (quad) {
+    const flat = warpQuad(source, quad)
+    views.push(straighten(flat.canvas, flat.toSource, source))
   }
+  views.push(straighten(source, (x, y) => [x, y], source))
 
+  const detections: Detection[] = []
+  let text = ''
+  let entities: Entity[] = []
+  for (const view of views) {
+    const r = await recognizeView(worker, view, opts)
+    if (!entities.length && r.entities.length) {
+      text = r.text
+      entities = r.entities
+    } else if (!text) text = r.text
+    for (const d of r.detections) {
+      if (!detections.some((x) => x.type === d.type && overlap(x.box, d.box) > 0.35)) detections.push(d)
+    }
+    if (view.work !== source) view.work.width = view.work.height = 0
+  }
+  return { detections, text, entities }
+}
+
+interface View {
+  /** Canvas to recognise. */
+  work: HTMLCanvasElement
+  /** Maps a point of `work` back to the original image. */
+  toSource: (x: number, y: number) => [number, number]
+  /** False when `work` is the untouched original. */
+  transformed: boolean
+}
+
+function straighten(canvas: HTMLCanvasElement, toSource: View['toSource'], source: HTMLCanvasElement): View {
+  const skew = estimateSkew(canvas)
+  if (Math.abs(skew) < 1) return { work: canvas, toSource, transformed: canvas !== source }
+  const r = rotateCanvas(canvas, skew)
+  if (canvas !== source) canvas.width = canvas.height = 0
+  return { work: r.canvas, toSource: (x, y) => toSource(...r.toSource(x, y)), transformed: true }
+}
+
+async function recognizeView(worker: Worker, view: View, opts: DetectOptions): Promise<{ detections: Detection[]; text: string; entities: Entity[] }> {
+  const { work, toSource, transformed } = view
   // upscale small screenshots: Tesseract works best with ~30px glyphs
   const scale = work.width < 1400 ? Math.min(2.5, 2000 / Math.max(1, work.width)) : 1
   let input: HTMLCanvasElement = work
@@ -153,19 +192,29 @@ export async function detectInImage(
     enhanced.width = enhanced.height = 0
   }
 
-  // back to source coordinates + padding (rotated boxes keep the text angle)
-  const angle = work === source ? 0 : (skew * Math.PI) / 180
+  // back to source coordinates + padding; boxes found on a straightened/flattened copy become
+  // quadrilaterals that follow the text in the original photo
   for (const d of detections) {
     const pad = Math.max(2, d.box.h * 0.18)
-    const w = (d.box.w + pad * 2) / scale
-    const h = (d.box.h + pad * 2) / scale
-    const [cx, cy] = toSource((d.box.x + d.box.w / 2) / scale, (d.box.y + d.box.h / 2) / scale)
-    d.box = angle ? { x: cx - w / 2, y: cy - h / 2, w, h, angle } : { x: Math.max(0, cx - w / 2), y: Math.max(0, cy - h / 2), w, h }
+    const x0 = (d.box.x - pad) / scale
+    const y0 = (d.box.y - pad) / scale
+    const x1 = (d.box.x + d.box.w + pad) / scale
+    const y1 = (d.box.y + d.box.h + pad) / scale
+    if (!transformed) {
+      d.box = { x: Math.max(0, x0), y: Math.max(0, y0), w: x1 - Math.max(0, x0), h: y1 - Math.max(0, y0) }
+      continue
+    }
+    const q = [toSource(x0, y0), toSource(x1, y0), toSource(x1, y1), toSource(x0, y1)]
+    const xs = q.map((p) => p[0])
+    const ys = q.map((p) => p[1])
+    const bx = Math.min(...xs)
+    const by = Math.min(...ys)
+    d.box = { x: bx, y: by, w: Math.max(...xs) - bx, h: Math.max(...ys) - by, quad: q }
   }
-  if (input !== source) input.width = input.height = 0
-  if (work !== source && work !== input) work.width = work.height = 0
+  if (input !== work) input.width = input.height = 0
   return { detections, text: firstText, entities: firstEntities }
 }
+
 
 /** QR codes / barcodes often encode personal data (tickets, payment, vaccine passes). */
 export async function detectCodes(source: HTMLCanvasElement): Promise<Detection[]> {
