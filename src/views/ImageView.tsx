@@ -726,7 +726,7 @@ export function ImageView() {
                 )}
               </div>
               {!barcodeSupported() && (
-                <p className="hint card-pad-x">
+                <p className="hint card-foot-hint">
                   <QrCode size={14} /> 이 브라우저는 QR 코드 자동 감지를 지원하지 않아요. QR은 직접 드래그해 가려 주세요.
                 </p>
               )}
