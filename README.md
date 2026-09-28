@@ -38,11 +38,11 @@ AI 답변: [이름_1] 과장님께 보낼 메일 초안입니다 …
 
 **텍스트 가리기 → AI 답변 되돌리기**
 
-<p align="center"><img src="public/demo/text.gif" alt="글을 붙여넣으면 개인정보가 자리표시자로 가려지고, AI 답변을 붙여넣으면 원래 값으로 돌아오는 화면" width="100%" /></p>
+<p align="center"><picture><source media="(max-width: 700px)" srcset="public/demo/m-text.gif" /><img src="public/demo/text.gif" alt="글을 붙여넣으면 개인정보가 자리표시자로 가려지고, AI 답변을 붙여넣으면 원래 값으로 돌아오는 화면" width="100%" /></picture></p>
 
 **캡처·사진 속 개인정보 가리기**
 
-<p align="center"><img src="public/demo/image.gif" alt="카톡 캡처 이미지에서 글자를 인식해 개인정보를 박스로 가리는 화면" width="100%" /></p>
+<p align="center"><picture><source media="(max-width: 700px)" srcset="public/demo/m-image.gif" /><img src="public/demo/image.gif" alt="카톡 캡처 이미지에서 글자를 인식해 개인정보를 박스로 가리는 화면" width="100%" /></picture></p>
 
 **브라우저 확장: 붙여넣는 순간 자동으로**
 

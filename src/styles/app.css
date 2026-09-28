@@ -1484,12 +1484,28 @@ input[type='checkbox'] {
   display: grid;
   place-items: center;
   opacity: 0;
+  /* invisible buttons must not catch taps meant for the box underneath */
+  pointer-events: none;
   transition: opacity 0.12s;
 }
-.img-box:hover .img-box-x,
-.img-box.hover .img-box-x,
 .img-box.sel .img-box-x {
   opacity: 1;
+  pointer-events: auto;
+}
+@media (hover: hover) {
+  .img-box:hover .img-box-x,
+  .img-box.hover .img-box-x {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+@media (pointer: coarse) {
+  /* thin text boxes: a slightly larger touch target */
+  .img-box::before {
+    content: '';
+    position: absolute;
+    inset: -6px -2px;
+  }
 }
 .img-box.sel {
   outline: 3px solid var(--g, var(--accent));
@@ -1500,6 +1516,7 @@ input[type='checkbox'] {
   outline-offset: 2px;
 }
 .img-box-h {
+  pointer-events: none;
   position: absolute;
   width: 12px;
   height: 12px;
@@ -1521,10 +1538,12 @@ input[type='checkbox'] {
 .img-box-h.se { right: -7px; bottom: -7px; cursor: nwse-resize; }
 .img-box.sel .img-box-h {
   opacity: 1;
+  pointer-events: auto;
 }
 @media (hover: hover) {
   .img-box:hover .img-box-h {
     opacity: 1;
+    pointer-events: auto;
   }
 }
 .img-box.sel .img-box-x {
@@ -1798,6 +1817,10 @@ input[type='checkbox'] {
   height: auto;
   display: block;
   background: var(--surface-2);
+}
+.demo-card.phone {
+  max-width: 360px;
+  border-radius: 22px;
 }
 .demo-note {
   margin: 0;
