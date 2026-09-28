@@ -1477,6 +1477,8 @@ input[type='checkbox'] {
   margin-left: -10px;
   width: 20px;
   height: 20px;
+  padding: 0;
+  line-height: 0;
   border-radius: 50%;
   border: 0;
   background: var(--danger);
@@ -1487,6 +1489,9 @@ input[type='checkbox'] {
   /* invisible buttons must not catch taps meant for the box underneath */
   pointer-events: none;
   transition: opacity 0.12s;
+}
+.img-box-x svg {
+  display: block;
 }
 .img-box.sel .img-box-x {
   opacity: 1;
@@ -1625,6 +1630,8 @@ input[type='checkbox'] {
   right: -6px;
   width: 18px;
   height: 18px;
+  padding: 0;
+  line-height: 0;
   border-radius: 50%;
   border: 0;
   background: var(--text);
