@@ -298,7 +298,7 @@ async function recognizeView(
           }
         }
         if (!e.id.startsWith('num:')) continue
-        const grown = growAlongLine(lin.glyphs, e.start, e.end, (ch) => !/[가-힣A-Za-z]/.test(ch))
+        const grown = growAlongLine(lin.glyphs, e.start, e.end, (ch) => /^[\d#*@&%$|!]$/.test(ch))
         if (grown) found.push({ id: `${e.id}:line`, type: 'custom', label: '번호', text: e.value, box: grown })
         const card = extrapolateCardNumber(lin.glyphs, text, e.start, e.end)
         if (card) found.push({ id: `${e.id}:card`, type: 'card', text: `${e.value.trim()} (카드번호 추정)`, box: card })
@@ -421,8 +421,10 @@ export function numberRuns(text: string): Entity[] {
     let end = m.index + v.length
     while (start > 0 && junk.test(text[start - 1]) && text[start - 1] !== '\n') start--
     while (end < text.length && junk.test(text[end]) && text[end] !== '\n') end++
-    while (start < m.index && /\s/.test(text[start])) start++
-    while (end > m.index + v.length && /\s/.test(text[end - 1])) end--
+    // but never end on punctuation or space (the ':' of "연락처: 010…", a closing bracket)
+    const edge = /[\s()'"“”‘’.,:;-]/
+    while (start < m.index && edge.test(text[start])) start++
+    while (end > m.index + v.length && edge.test(text[end - 1])) end--
     out.push({ id: `num:${start}:${end}`, type: 'custom', start, end, value: text.slice(start, end).replace(/^[^\d]+|[^\d]+$/g, ''), confidence: 'medium', source: 'rule', label: '번호', note: '긴 번호' })
   }
   return out
@@ -578,11 +580,17 @@ function linearize(blocks: TBlock[], gapRatio: number): { text: string; glyphs: 
 function boxesFor(entities: Entity[], glyphs: Array<Glyph | null>): Detection[] {
   const out: Detection[] = []
   for (const e of entities) {
+    // punctuation at either end ("300,", "김서준)", ": 010…") is not part of the value
+    let s0 = e.start
+    let s1 = e.end
+    const edge = (i: number) => !glyphs[i] || /^[,.:;()[\]{}'"“”‘’·]$/.test(glyphs[i]!.ch)
+    while (s0 < s1 - 1 && edge(s0)) s0++
+    while (s1 - 1 > s0 && edge(s1 - 1)) s1--
     // split the entity's glyphs into visual lines
-    const lines: GBox[][] = []
-    let cur: GBox[] = []
+    const lines: Glyph[][] = []
+    let cur: Glyph[] = []
     let ref: GBox | null = null
-    for (let i = e.start; i < e.end; i++) {
+    for (let i = s0; i < s1; i++) {
       const g = glyphs[i]
       if (!g) continue
       const b = g.bbox
@@ -594,12 +602,18 @@ function boxesFor(entities: Entity[], glyphs: Array<Glyph | null>): Detection[] 
           cur = []
         }
       }
-      cur.push(b)
+      cur.push(g)
       ref = b
     }
     if (cur.length) lines.push(cur)
+    // …and at the ends of every line of a value that wraps ("…올림픽로 300," / "롯데캐슬…")
+    const punct = (g: Glyph) => /^[,.:;()[\]{}'"“”‘’·]$/.test(g.ch)
+    for (const l of lines) {
+      while (l.length > 1 && punct(l[0])) l.shift()
+      while (l.length > 1 && punct(l[l.length - 1])) l.pop()
+    }
     for (const line of lines) {
-      const box = robustBounds(line)
+      const box = robustBounds(line.map((g) => g.bbox))
       if (box) out.push({ id: `${e.id}:${out.length}`, type: e.type, text: e.value, box, entityId: e.id, label: e.label })
     }
   }
@@ -795,6 +809,12 @@ function addDetection(list: Detection[], d: Detection) {
         return
       }
       continue
+    }
+    // a specific, validated value (phone, account…) keeps its own box: the generic long-number
+    // run around it tends to include neighbouring junk (a colon, a misread bank name)
+    if (generic(x) !== generic(d)) {
+      list[i] = generic(x) ? { ...d } : x
+      return
     }
     const keep = area(d.box) > area(x.box) * 1.15 ? { ...d } : { ...x }
     // same text found twice: cover both horizontally, but keep the tighter vertical extent
@@ -1021,9 +1041,11 @@ export function tightenToInk(gray: Uint8Array, W: number, H: number, box: OcrBox
     right = x
   }
   if (left < 0) return box
-  const cgap = Math.max(1, Math.round(h0 * 0.25))
-  const minLeft = Math.max(0, bx0 - rx0 - Math.round(h0 * 0.3))
-  const maxRight = Math.min(cols.length - 1, bx1 - rx0 - 1 + Math.round(h0 * 0.3))
+  // sideways only through ink that touches the box edge (a glyph the OCR box cut through),
+  // never across a gap: the next character or a colon/bracket stays outside
+  const cgap = 0
+  const minLeft = Math.max(0, bx0 - rx0 - Math.round(h0 * 0.2))
+  const maxRight = Math.min(cols.length - 1, bx1 - rx0 - 1 + Math.round(h0 * 0.2))
   for (let x = left - 1, miss = 0; x >= minLeft && miss <= cgap; x--) {
     if (colInked(x)) {
       left = x
