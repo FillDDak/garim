@@ -109,6 +109,9 @@ const DEMOS: Array<{ value: DemoId; label: string; alt: string; w: number; h: nu
   { value: 'extension', label: '브라우저 확장', alt: 'AI 채팅창에 붙여넣는 순간 개인정보가 가려지고, 답변에서는 내 화면에만 원래 값이 보이는 화면', w: 1000, h: 696 },
 ]
 
+/** Cache-busting suffix for files replaced under the same name after a deploy. */
+const V = `?v=${__ASSET_VERSION__}`
+
 /** WebM (VP9) is sharp and small; browsers that can't play it get the GIF. */
 const canPlayWebm = () => typeof document !== 'undefined' && document.createElement('video').canPlayType('video/webm; codecs="vp9"') !== ''
 const PHONE_QUERY = '(max-width: 640px)'
@@ -139,9 +142,9 @@ function DemoViewer() {
       <Segmented<DemoId> label="예시 선택" value={demo} options={DEMOS.map(({ value, label }) => ({ value, label }))} onChange={setDemo} size="sm" />
       <Card className={`demo-card ${m ? 'phone' : ''}`}>
         {video ? (
-          <video key={file} src={`${file}.webm`} poster={`${file}.jpg`} width={w} height={h} autoPlay muted loop playsInline preload="auto" aria-label={d.alt} />
+          <video key={file} src={`${file}.webm${V}`} poster={`${file}.jpg${V}`} width={w} height={h} autoPlay muted loop playsInline preload="auto" aria-label={d.alt} />
         ) : (
-          <img key={file} src={`${file}.gif`} alt={d.alt} width={w} height={h} loading="lazy" decoding="async" />
+          <img key={file} src={`${file}.gif${V}`} alt={d.alt} width={w} height={h} loading="lazy" decoding="async" />
         )}
       </Card>
       <p className="muted demo-note">{phone && d.value === 'extension' ? 'PC의 크롬·엣지·웨일에서 쓰는 기능이에요. ' : ''}예시 속 이름·번호는 모두 지어낸 값이에요.</p>
@@ -235,7 +238,7 @@ export function GuideView({ go }: { go: (route: string) => void }) {
               <li>오른쪽 위 <b>개발자 모드</b>를 켜고 <b>압축해제된 확장 프로그램을 로드</b> → 풀어 둔 폴더를 선택합니다.</li>
               <li>이미 열려 있던 ChatGPT·Gemini 등의 탭은 <b>새로고침</b>해야 동작해요. (확장 아이콘을 누르면 이 탭에서 동작 중인지 알려 줘요)</li>
             </ol>
-            <a className="btn btn-primary btn-lg" href="garim-extension.zip" download>
+            <a className="btn btn-primary btn-lg" href={`garim-extension.zip${V}`} download="garim-extension.zip">
               <Puzzle size={17} />
               <span>확장 프로그램 받기 (.zip)</span>
             </a>

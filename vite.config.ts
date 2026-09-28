@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react'
 import { createHash } from 'node:crypto'
-import { readdirSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 
@@ -69,9 +69,33 @@ function serviceWorker(): Plugin {
   }
 }
 
+/**
+ * A short hash of the files that are replaced under the same name (demo videos, the extension
+ * zip): appended as ?v= so browsers never show a stale copy after a deploy.
+ */
+function assetVersion(): string {
+  const h = createHash('sha256')
+  const files: string[] = []
+  try {
+    for (const f of readdirSync('public/demo').sort()) files.push(join('public/demo', f))
+  } catch {
+    /* no demos */
+  }
+  files.push('public/garim-extension.zip')
+  for (const f of files) {
+    try {
+      h.update(f).update(readFileSync(f))
+    } catch {
+      /* missing file */
+    }
+  }
+  return h.digest('hex').slice(0, 10)
+}
+
 export default defineConfig({
   base: './',
   plugins: [react(), csp(), serviceWorker()],
+  define: { __ASSET_VERSION__: JSON.stringify(assetVersion()) },
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 1200,

@@ -1,7 +1,8 @@
 /* 가림 service worker — makes the app work fully offline. No request ever leaves for another origin. */
 const VERSION = '__VERSION__'
 const SHELL = `garim-shell-${VERSION}`
-const RUNTIME = 'garim-runtime-v1'
+// v2: the v1 cache could hold stale copies of files replaced under the same name
+const RUNTIME = 'garim-runtime-v2'
 const PRECACHE = __PRECACHE__
 
 self.addEventListener('install', (event) => {
@@ -17,7 +18,13 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('garim-shell-') && k !== SHELL).map((k) => caches.delete(k))))
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((k) => (k.startsWith('garim-shell-') && k !== SHELL) || (k.startsWith('garim-runtime-') && k !== RUNTIME))
+            .map((k) => caches.delete(k)),
+        ),
+      )
       .then(() => self.clients.claim()),
   )
 })
@@ -78,18 +85,40 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Everything else (hashed assets, fonts, OCR models, pdf.js data): cache first
+  const path = url.pathname
+  // Files that are replaced under the same name (demo videos, the extension zip): always from the
+  // network, never from a stale copy
+  if (/\/demo\//.test(path) || path.endsWith('.zip')) return
+
+  // Content that never changes under its name (hashed bundles, OCR/face models, pdf.js data,
+  // fonts): cache first
+  if (/\/(assets|ocr|face|pdfjs)\//.test(path) || path.endsWith('.woff2')) {
+    event.respondWith(
+      caches.match(req, { ignoreSearch: true }).then(
+        (hit) =>
+          hit ||
+          fetch(req).then((res) => {
+            if (res.ok && res.type === 'basic') {
+              const copy = res.clone()
+              caches.open(RUNTIME).then((c) => c.put(req, copy))
+            }
+            return res
+          }),
+      ),
+    )
+    return
+  }
+
+  // Everything else (icons, manifest…): fresh when online, cached copy when offline
   event.respondWith(
-    caches.match(req, { ignoreSearch: true }).then(
-      (hit) =>
-        hit ||
-        fetch(req).then((res) => {
-          if (res.ok && res.type === 'basic') {
-            const copy = res.clone()
-            caches.open(RUNTIME).then((c) => c.put(req, copy))
-          }
-          return res
-        }),
-    ),
+    fetch(req)
+      .then((res) => {
+        if (res.ok && res.type === 'basic') {
+          const copy = res.clone()
+          caches.open(RUNTIME).then((c) => c.put(req, copy))
+        }
+        return res
+      })
+      .catch(() => caches.match(req, { ignoreSearch: true }).then((r) => r || Response.error())),
   )
 })
