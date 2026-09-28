@@ -1419,6 +1419,8 @@ input[type='checkbox'] {
   overflow: hidden;
 }
 .stage-wrap {
+  /* one finger scrolls the page over the margins; two-finger pinch is ours (image zoom) */
+  touch-action: pan-y;
   padding: 16px;
   background:
     linear-gradient(45deg, var(--surface-3) 25%, transparent 25%, transparent 75%, var(--surface-3) 75%),
@@ -1431,17 +1433,56 @@ input[type='checkbox'] {
   min-height: 300px;
   overflow: auto;
 }
-.stage {
+.stage-viewport {
   --stage-h: calc(100vh - 262px);
   position: relative;
   flex: none;
   max-width: 100%;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  margin: auto;
+}
+.stage {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
   cursor: crosshair;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
-  box-shadow: var(--shadow);
-  margin: auto;
+}
+.zoom-reset {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  z-index: 3;
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 11px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  color: #fff;
+  background: rgba(20, 18, 40, 0.78);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+}
+/* keep outlines, handles and the delete button the same on-screen size while zoomed */
+.stage .img-box {
+  outline-width: calc(2px / var(--z, 1));
+}
+.stage .img-box:hover,
+.stage .img-box.hover,
+.stage .img-box.sel {
+  outline-width: calc(3px / var(--z, 1));
+}
+.stage .img-box-h,
+.stage .img-box-x {
+  transform: scale(calc(1 / var(--z, 1)));
+}
+.stage .img-box-x {
+  transform-origin: 50% 100%;
+  top: calc(-6px / var(--z, 1) - 20px);
 }
 .stage-canvas {
   display: block;
@@ -2259,7 +2300,7 @@ input[type='checkbox'] {
     padding: 10px;
     max-height: none;
   }
-  .stage {
+  .stage-viewport {
     --stage-h: 70vh;
   }
   .footer {

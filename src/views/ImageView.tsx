@@ -44,6 +44,8 @@ const STYLE_OPTIONS: Array<{ value: RedactStyle; label: string; hint: string }> 
 const groupOf = (d: Detection) => (d.type === 'qr' ? 'tech' : d.type === 'face' ? 'person' : TYPE_META[d.type].group)
 const typeName = (d: Detection) => (d.type === 'qr' ? 'QR·바코드' : d.type === 'face' ? '얼굴' : d.type === 'custom' ? d.label ?? '직접 지정' : TYPE_META[d.type].name)
 
+const MAX_ZOOM = 6
+
 type EditMode = 'move' | 'nw' | 'ne' | 'sw' | 'se'
 const HANDLES: EditMode[] = ['nw', 'ne', 'sw', 'se']
 
@@ -200,6 +202,113 @@ export function ImageView() {
     if (active && previewRef.current) render(active, previewRef.current)
   }, [active, render])
 
+  // ─── zoom (two-finger pinch, trackpad pinch / Ctrl+wheel); never smaller than the fitted size
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const [view, setViewState] = useState({ z: 1, tx: 0, ty: 0 })
+  // the latest view for gesture math (a render may lag behind fast pointer events)
+  const viewRef = useRef(view)
+  const setView = useCallback((v: { z: number; tx: number; ty: number }) => {
+    viewRef.current = v
+    setViewState(v)
+  }, [])
+  const touches = useRef(new Map<number, { x: number; y: number }>())
+  const pinch = useRef<{ d0: number; z0: number; px: number; py: number } | null>(null)
+  // after a pinch, the finger left on the screen must not start drawing a box
+  const pinched = useRef(false)
+
+  const clampView = useCallback((z: number, tx: number, ty: number) => {
+    const el = viewportRef.current
+    const zz = Math.min(MAX_ZOOM, Math.max(1, z))
+    if (!el) return { z: zz, tx: 0, ty: 0 }
+    const W = el.clientWidth
+    const H = el.clientHeight
+    return { z: zz, tx: Math.min(0, Math.max(W - W * zz, tx)), ty: Math.min(0, Math.max(H - H * zz, ty)) }
+  }, [])
+  /** zoom to `z` keeping the image point under (clientX, clientY) in place */
+  const zoomAt = useCallback(
+    (clientX: number, clientY: number, z: number) => {
+      const el = viewportRef.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      const v = viewRef.current
+      const px = (clientX - r.left - v.tx) / v.z
+      const py = (clientY - r.top - v.ty) / v.z
+      const nz = Math.min(MAX_ZOOM, Math.max(1, z))
+      setView(clampView(nz, clientX - r.left - px * nz, clientY - r.top - py * nz))
+    },
+    [clampView, setView],
+  )
+  const resetZoom = useCallback(() => setView({ z: 1, tx: 0, ty: 0 }), [setView])
+  useEffect(() => {
+    resetZoom()
+  }, [activeId, resetZoom])
+
+  // desktop: trackpad pinch (reported as Ctrl+wheel) zooms; plain wheel pans while zoomed
+  useEffect(() => {
+    const el = viewportRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault()
+        zoomAt(e.clientX, e.clientY, viewRef.current.z * Math.exp(-e.deltaY * 0.004))
+      } else if (viewRef.current.z > 1) {
+        e.preventDefault()
+        const v = viewRef.current
+        setView(clampView(v.z, v.tx - e.deltaX, v.ty - e.deltaY))
+      }
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [activeId, items.length, zoomAt, clampView, setView])
+
+  /** Two-finger gestures. Returns true when the event belongs to a pinch and must not draw/edit. */
+  const pinchPointer = (e: React.PointerEvent, phase: 'down' | 'move' | 'up'): boolean => {
+    if (e.pointerType !== 'touch') return false
+    const t = touches.current
+    if (phase === 'up') {
+      t.delete(e.pointerId)
+      if (t.size < 2) pinch.current = null
+      const was = pinched.current
+      if (t.size === 0) pinched.current = false
+      return was
+    }
+    if (phase === 'down') {
+      // keep receiving this finger's events even if it slides off the image
+      try {
+        ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+      } catch {
+        /* ignore */
+      }
+    }
+    t.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (phase === 'down' && t.size === 2) {
+      // second finger: cancel whatever the first one started, then pinch
+      const ed = editRef.current
+      if (ed && active) update(active.id, (it) => ({ ...it, boxes: it.boxes.map((b) => (b.id === ed.id ? { ...b, box: ed.orig } : b)) }))
+      editRef.current = null
+      setDrag(null)
+      const [a, b] = [...t.values()]
+      const r = viewportRef.current!.getBoundingClientRect()
+      const v = viewRef.current
+      const mx = (a.x + b.x) / 2
+      const my = (a.y + b.y) / 2
+      pinch.current = { d0: Math.max(10, Math.hypot(a.x - b.x, a.y - b.y)), z0: v.z, px: (mx - r.left - v.tx) / v.z, py: (my - r.top - v.ty) / v.z }
+      pinched.current = true
+      return true
+    }
+    if (phase === 'move' && pinch.current && t.size >= 2) {
+      const [a, b] = [...t.values()]
+      const r = viewportRef.current!.getBoundingClientRect()
+      const { d0, z0, px, py } = pinch.current
+      const z = Math.min(MAX_ZOOM, Math.max(1, (z0 * Math.hypot(a.x - b.x, a.y - b.y)) / d0))
+      const mx = (a.x + b.x) / 2
+      const my = (a.y + b.y) / 2
+      setView(clampView(z, mx - r.left - px * z, my - r.top - py * z))
+      return true
+    }
+    return pinched.current || t.size > 1
+  }
+
   const toImageCoords = (clientX: number, clientY: number) => {
     const el = stageRef.current
     if (!el || !active) return { x: 0, y: 0 }
@@ -212,6 +321,7 @@ export function ImageView() {
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (!active || e.button !== 0) return
+    if (pinched.current || touches.current.size > 1) return
     const target = e.target as HTMLElement
     if (target.closest('.img-box-x')) return
     const boxEl = target.closest<HTMLElement>('.img-box[data-id]')
@@ -416,7 +526,7 @@ export function ImageView() {
                   ? progress
                     ? `${progress.status} ${Math.round(progress.progress * 100)}%`
                     : '글자 인식 준비 중…'
-                  : '빈 곳을 드래그해 추가 · 박스를 끌어 이동, 모서리로 크기 조절 · 누르면 켜고 끄기'
+                  : '빈 곳을 드래그해 추가 · 박스를 끌어 이동, 모서리로 크기 조절 · 누르면 켜고 끄기 · 두 손가락이나 Ctrl+휠로 확대'
               }
               icon={scanning ? <Loader2 size={18} className="spin" /> : <MousePointerSquareDashed size={18} />}
               actions={
@@ -435,12 +545,36 @@ export function ImageView() {
                 </>
               }
             />
-            <div className="stage-wrap">
+            <div
+              className="stage-wrap"
+              // two-finger zoom anywhere over the image area (fingers often land just outside it);
+              // capture phase, so a pinch never reaches the stage as drawing
+              onPointerDownCapture={(e) => {
+                if (pinchPointer(e, 'down')) e.stopPropagation()
+              }}
+              onPointerMoveCapture={(e) => {
+                if (pinchPointer(e, 'move')) e.stopPropagation()
+              }}
+              onPointerUpCapture={(e) => {
+                if (pinchPointer(e, 'up')) {
+                  e.stopPropagation()
+                  setDrag(null)
+                }
+              }}
+              onPointerCancelCapture={(e) => {
+                pinchPointer(e, 'up')
+              }}
+            >
               {active && (
+                <div
+                  className="stage-viewport"
+                  ref={viewportRef}
+                  style={{ aspectRatio: `${active.source.width} / ${active.source.height}`, width: `min(100%, calc(var(--stage-h) * ${(active.source.width / active.source.height).toFixed(4)}))` }}
+                >
                 <div
                   className="stage"
                   ref={stageRef}
-                  style={{ aspectRatio: `${active.source.width} / ${active.source.height}`, width: `min(100%, calc(var(--stage-h) * ${(active.source.width / active.source.height).toFixed(4)}))` }}
+                  style={{ transform: view.z === 1 ? undefined : `translate(${view.tx}px, ${view.ty}px) scale(${view.z})`, ['--z' as string]: view.z }}
                   onPointerDown={onPointerDown}
                   onPointerMove={onPointerMove}
                   onPointerUp={onPointerUp}
@@ -515,6 +649,12 @@ export function ImageView() {
                       }}
                     />
                   )}
+                </div>
+                {view.z > 1 && (
+                  <button type="button" className="zoom-reset" onClick={resetZoom} title="원래 크기로">
+                    {Math.round(view.z * 100)}% · 원래 크기
+                  </button>
+                )}
                 </div>
               )}
             </div>
