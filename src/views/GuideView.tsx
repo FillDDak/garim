@@ -103,10 +103,10 @@ function ExtPageLink({ name, url, current }: { name: string; url: string; curren
 
 type DemoId = 'text' | 'image' | 'extension'
 const DEMOS: Array<{ value: DemoId; label: string; alt: string; w: number; h: number; mobile?: { w: number; h: number } }> = [
-  { value: 'text', label: '텍스트 가리기·되돌리기', alt: '글을 붙여넣으면 개인정보가 자리표시자로 가려지고, AI 답변을 붙여넣으면 원래 값으로 돌아오는 화면', w: 1180, h: 700, mobile: { w: 390, h: 633 } },
-  { value: 'image', label: '이미지 가리기', alt: '카톡 캡처 이미지에서 글자를 인식해 개인정보를 박스로 가리는 화면', w: 1180, h: 700, mobile: { w: 390, h: 633 } },
+  { value: 'text', label: '텍스트 가리기·되돌리기', alt: '글을 붙여넣으면 개인정보가 자리표시자로 가려지고, AI 답변을 붙여넣으면 원래 값으로 돌아오는 화면', w: 1180, h: 756, mobile: { w: 390, h: 697 } },
+  { value: 'image', label: '이미지 가리기', alt: '카톡 캡처 이미지에서 글자를 인식해 개인정보를 박스로 가리는 화면', w: 1180, h: 756, mobile: { w: 390, h: 697 } },
   // the extension exists only in desktop browsers: same demo on every screen
-  { value: 'extension', label: '브라우저 확장', alt: 'AI 채팅창에 붙여넣는 순간 개인정보가 가려지고, 답변에서는 내 화면에만 원래 값이 보이는 화면', w: 1000, h: 640 },
+  { value: 'extension', label: '브라우저 확장', alt: 'AI 채팅창에 붙여넣는 순간 개인정보가 가려지고, 답변에서는 내 화면에만 원래 값이 보이는 화면', w: 1000, h: 696 },
 ]
 
 /** WebM (VP9) is sharp and small; browsers that can't play it get the GIF. */
