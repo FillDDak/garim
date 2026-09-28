@@ -417,6 +417,10 @@ const NAME_LABEL_COLON_RE = new RegExp(
   'gid',
 )
 const NAME_LABEL_SPACE_RE = new RegExp(`(?<![${H}])(?:${LOOSE_LABELS.map(spaced).join('|')})\\s*(?:\\([^)\\n]{0,10}\\))?\\s+([${H}]{2,4})(?![${H}])`, 'gid')
+// OCR variants after a label: no space ("예금주김서준") or a name split into syllables ("김 서준")
+const GLUE_LABELS = [...LOOSE_LABELS.filter((l) => l.replace(/\\s\?/g, '').length >= 3), '성명', '성함']
+const NAME_LABEL_GLUED_RE = new RegExp(`(?<![${H}])(?:${GLUE_LABELS.map(spaced).join('|')})([${H}]{3})(?![${H}])`, 'gd')
+const NAME_LABEL_SPLIT_RE = new RegExp(`(?<![${H}])(?:${LOOSE_LABELS.map(spaced).join('|')})\\s*(?:\\([^)\\n]{0,10}\\))?\\s*[:：]?\\s*([${H}] [${H}]{2}|[${H}]{2} [${H}])(?![${H}])`, 'gd')
 const PARTICLE_ALT = KOREAN_PARTICLES.map(escapeRe).join('|')
 const LONG_TITLES = NAME_TITLES.filter((t) => t.length >= 2).map(escapeRe).join('|') + '|(?:드림|올림|배상)(?![가-힣])'
 const SHORT_TITLES = NAME_TITLES.filter((t) => t.length === 1).map(escapeRe).join('|')
@@ -444,6 +448,16 @@ export const detectNamesBasic: Detector = (text) => {
   for (const m of matches(NAME_LABEL_SPACE_RE, text)) {
     const r = groupRange(m, 1)
     if (!r || !isPlausibleName(m[1])) continue
+    out.push({ type: 'name', start: r[0], end: r[1], confidence: 'high', source: 'context', note: '이름 항목' })
+  }
+  for (const m of matches(NAME_LABEL_GLUED_RE, text)) {
+    const r = groupRange(m, 1)
+    if (!r || !isPlausibleName(m[1])) continue
+    out.push({ type: 'name', start: r[0], end: r[1], confidence: 'high', source: 'context', note: '이름 항목' })
+  }
+  for (const m of matches(NAME_LABEL_SPLIT_RE, text)) {
+    const r = groupRange(m, 1)
+    if (!r || !isPlausibleName(m[1].replace(' ', ''))) continue
     out.push({ type: 'name', start: r[0], end: r[1], confidence: 'high', source: 'context', note: '이름 항목' })
   }
   for (const m of matches(NAME_TITLE_RE, text)) {

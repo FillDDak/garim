@@ -149,3 +149,16 @@ describe('document nouns are not names', () => {
     expect(names).toEqual(['이서연'])
   })
 })
+
+describe('names after a label, as OCR tends to read them', () => {
+  const names = (t: string) => detect(t, opts).filter((e) => e.type === 'name').map((e) => e.value)
+  it('finds a name glued to its label or split into syllables', () => {
+    expect(names('국민은행 123456-01-987654 (예금주김서준)')).toContain('김서준')
+    expect(names('예금주 김 서준')).toContain('김 서준')
+    expect(names('성명: 박수 현')).toContain('박수 현')
+  })
+  it('does not glue ordinary words after a label', () => {
+    expect(names('예금주확인 요청')).toEqual([])
+    expect(names('성명란 비워둠')).toEqual([])
+  })
+})
