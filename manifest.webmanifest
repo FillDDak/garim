@@ -1,0 +1,77 @@
+{
+  "name": "가림 — AI에 보내기 전 개인정보 가리기",
+  "short_name": "가림",
+  "description": "개인정보는 가려서 보내고, AI 답변은 원래대로. 서버 전송 0, 완전 오프라인.",
+  "lang": "ko",
+  "start_url": "./#/text",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f5f8",
+  "theme_color": "#5a3ff5",
+  "categories": [
+    "productivity",
+    "utilities",
+    "security"
+  ],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "share_target": {
+    "action": "./share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "images",
+          "accept": [
+            "image/*",
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp",
+            ".gif",
+            ".heic"
+          ]
+        }
+      ]
+    }
+  },
+  "shortcuts": [
+    {
+      "name": "텍스트 가리기",
+      "url": "./#/text"
+    },
+    {
+      "name": "AI 답변 되돌리기",
+      "url": "./#/restore"
+    },
+    {
+      "name": "이미지 가리기",
+      "url": "./#/image"
+    }
+  ]
+}

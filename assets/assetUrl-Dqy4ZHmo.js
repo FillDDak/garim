@@ -1,0 +1,1 @@
+var e=e=>new URL(`./${e}`,window.location.href).href;export{e as t};
