@@ -32,7 +32,9 @@ jobs:
       - run: npm run build
 
       - name: Deploy to GitHub Pages (gh-pages branch)
-        if: github.event_name != 'pull_request'
+        # only main publishes the site (the work branch is tested, not deployed), so a push to both
+        # at once never races for gh-pages
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

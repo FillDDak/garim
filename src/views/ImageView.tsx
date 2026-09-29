@@ -273,6 +273,13 @@ export function ImageView() {
       return was
     }
     if (phase === 'down') {
+      // the first finger of a new touch: no other finger is down, whatever we remember (a lift
+      // the browser never reported must not turn every later touch into a pinch)
+      if (e.isPrimary) {
+        t.clear()
+        pinch.current = null
+        pinched.current = false
+      }
       // keep receiving this finger's events even if it slides off the image
       try {
         ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
@@ -323,9 +330,20 @@ export function ImageView() {
     if (!active || e.button !== 0) return
     if (pinched.current || touches.current.size > 1) return
     const target = e.target as HTMLElement
-    if (target.closest('.img-box-x')) return
+    if (target.closest('.img-box-x, button')) return
+    // outside the image (the margin around it): a mouse drag starting there still draws, clamped
+    // to the image; a finger there scrolls the page; the margin's own scrollbars are left alone
+    if (!stageRef.current?.contains(target)) {
+      if (e.pointerType === 'touch') return
+      const wrap = e.currentTarget as HTMLElement
+      if (target === wrap && (e.nativeEvent.offsetX >= wrap.clientWidth || e.nativeEvent.offsetY >= wrap.clientHeight)) return
+    }
     const boxEl = target.closest<HTMLElement>('.img-box[data-id]')
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    try {
+      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    } catch {
+      /* the pointer is already gone */
+    }
     const p = toImageCoords(e.clientX, e.clientY)
     if (boxEl) {
       const b = active.boxes.find((x) => x.id === boxEl.dataset.id)
@@ -564,6 +582,10 @@ export function ImageView() {
               onPointerCancelCapture={(e) => {
                 pinchPointer(e, 'up')
               }}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerCancel}
             >
               {active && (
                 <div
@@ -575,10 +597,6 @@ export function ImageView() {
                   className="stage"
                   ref={stageRef}
                   style={{ transform: view.z === 1 ? undefined : `translate(${view.tx}px, ${view.ty}px) scale(${view.z})`, ['--z' as string]: view.z }}
-                  onPointerDown={onPointerDown}
-                  onPointerMove={onPointerMove}
-                  onPointerUp={onPointerUp}
-                  onPointerCancel={onPointerCancel}
                 >
                   <canvas ref={previewRef} className="stage-canvas" />
                   {scanning && <div className="scanline" />}
