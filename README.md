@@ -6,7 +6,7 @@
 
 **ChatGPT·Claude·Gemini에 붙여넣기 전, 개인정보는 가리고 — AI 답변은 원래대로 되돌리는 도구**
 
-[바로 사용하기 → fillddak.github.io/what](https://fillddak.github.io/what/)
+[바로 사용하기 → fillddak.github.io/garim](https://fillddak.github.io/garim/)
 
 서버 전송 0 · 완전 오프라인 · 설치/로그인 없음 · 오픈소스
 
@@ -72,7 +72,7 @@ AI 답변: [이름_1] 과장님께 보낼 메일 초안입니다 …
 
 ## 브라우저 확장 설치
 
-1. [사이트](https://fillddak.github.io/what/#/guide)에서 `확장 프로그램 받기`로 zip을 받아 압축을 풉니다. (직접 빌드: `npm run build:extension` → `extension/dist`)
+1. [사이트](https://fillddak.github.io/garim/#/guide)에서 `확장 프로그램 받기`로 zip을 받아 압축을 풉니다. (직접 빌드: `npm run build:extension` → `extension/dist`)
 2. `chrome://extensions` · `edge://extensions` · `whale://extensions` 를 엽니다.
 3. **개발자 모드**를 켜고 **압축해제된 확장 프로그램을 로드**에서 폴더를 선택합니다.
 4. 이미 열려 있던 AI 사이트 탭은 새로고침해야 동작합니다. (확장 아이콘 팝업에서 현재 탭의 동작 여부를 확인할 수 있어요)

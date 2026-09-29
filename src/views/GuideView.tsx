@@ -6,7 +6,7 @@ import { copyText } from '../lib/clipboard'
 import { useEffect, useState } from 'react'
 import { FEEDBACK_EMAIL, FEEDBACK_MAILTO } from '../lib/feedback'
 
-const REPO = 'https://github.com/FillDDak/what'
+const REPO = 'https://github.com/FillDDak/garim'
 
 const FAQ: Array<[string, React.ReactNode]> = [
   [

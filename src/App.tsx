@@ -224,7 +224,7 @@ function Shell() {
       <footer className="footer">
         <span>
           <ShieldCheck size={14} /> 모든 처리는 이 기기에서만 · 오픈소스 ·{' '}
-          <a href="https://github.com/FillDDak/what" target="_blank" rel="noreferrer">
+          <a href="https://github.com/FillDDak/garim" target="_blank" rel="noreferrer">
             GitHub
           </a>{' '}
           ·{' '}

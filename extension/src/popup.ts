@@ -57,6 +57,6 @@ async function checkTab() {
   })
 }
 
-$('open').addEventListener('click', () => chrome.tabs?.create({ url: 'https://fillddak.github.io/what/' }))
+$('open').addEventListener('click', () => chrome.tabs?.create({ url: 'https://fillddak.github.io/garim/' }))
 void render()
 void checkTab()
